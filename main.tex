@@ -1,0 +1,789 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage[T1]{fontenc}
+\usepackage{libertine}
+\usepackage{amssymb}
+ \usepackage{amsthm}
+ \usepackage{dsfont}
+ \usepackage{fullpage}
+ \usepackage{cellspace,makecell}
+\usepackage{enumitem}
+\newcommand{\poly}[2]{{#1}^{<#2}[x]}
+\newcommand{\negl}[1]{\text{negl}(#1)}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\abs}[1]{|#1 |}
+\newcommand{\dabs}[1]{||#1 ||}
+\newcommand{\middleProduct}[1]{\, \odot_{#1} \,}
+\newcommand{\sample}{\leftarrow}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}{Lemma}[section]
+\newtheorem{remark}{Remark}[section]
+\newtheorem{definition}{Definition}[section]
+\title{Identity-based Encryption and more from Middle-Product LWE}
+\author{Alex Lombardi \and
+Vinod Vaikuntanathan \and
+Thuy-Duong Vuong
+}
+\date{}
+\newcommand{\MP}[3]{\text{MP}_{q,#1,#2,#3}}
+\newcommand{\NMP}{\text{NMP}}
+%\newcommand{\gcd}{\text{gcd}}
+\newcommand{\PLWE}[2]{\text{PLWE}_{q,#1}^{(#2)}}
+\newcommand{\secp}{\lambda}
+\newcommand{\KeyGen}{\mathsf{KeyGen}}
+\newcommand{\Enc}{\mathsf{Enc}}
+\newcommand{\Dec}{\mathsf{Dec}}
+\newcommand{\sk}{\mathsf{sk}}
+\newcommand{\pk}{\mathsf{pk}}
+\newcommand{\msk}{\mathsf{msk}}
+\newcommand{\mpk}{\mathsf{mpk}}
+\newcommand{\id}{\mathsf{id}}
+\newcommand{\ct}{\mathsf{ct}}
+
+\newcommand{\Setup}{\mathsf{IBESetup}}
+\newcommand{\Extract}{\mathsf{IBEExtract}}
+
+\DeclareMathOperator{\cp}{CP}
+\DeclareMathOperator{\ef}{EF}
+
+\usepackage{color}
+\newcommand{\vnote}[1]{\textcolor{red}{Vinod's note: {#1}}}
+\newcommand{\anote}[1]{\textcolor{blue}{Alex: {#1}}}
+\usepackage[dvipsnames]{xcolor}
+\newcommand{\jnote}[1]{\textcolor{ForestGreen}{June: {#1}}}
+\usepackage{biblatex}
+\addbibresource{references.bib}
+\begin{document}
+\maketitle
+\begin{abstract}
+Middle-product learning with errors (MP-LWE) was recently introduced by Rosca, Sakzad, Steinfeld and Stehl\'{e} (CRYPTO 2017) as a way to combine the efficiency of Ring-LWE with the more robust security guarantees of plain LWE. While Ring-LWE is at the heart of {\em efficient} lattice-based cryptosystems, it involves the choice of an underlying ring which is essentially arbitrary. In other words, the effect of this choice on the security of Ring-LWE is poorly understood. On the other hand, Rosca et al. showed that a version of Ring-LWE, called MP-LWE, is as secure as Ring-LWE {\em over any number field}. They also demonstrated the usefulness of MP-LWE by constructing an MP-LWE based public-key encryption scheme whose efficiency is comparable to Ring-LWE based public-key encryption.
+
+In this work, we take this line of research further by showing how to construct several Identity-Based Encryption (IBE) schemes whose security is based on the hardness of MP-LWE. Compared to IBE schemes from LWE, our scheme is more efficient as it achieves keys and ciphertexts of size $\tilde{O}(n)$ (for identities of size $n$ bits.) Compared to IBE schemes from Ring-LWE, our scheme has similar efficiency, while being CPA-secure in the random oracle model based on a much weaker assumption. \vnote{Needs a rewrite.}
+
+%By \cite{MPLWE}, as long as the polynomial-LWE (PLWE) problem parametrized by polynomial $f$ is hard for at least one $f$ satisfying certain conditions, then MP-LWE, which is defined independently of any such $f$, is hard. Compared to IBE schemes from LWE, our scheme is more efficient as it achieves $\tilde{O}(n)$ key, ciphertext sizes and encryption/decryption time for message and identity of size $\theta(n).$ Compared to IBE schemes from PLWE, our scheme has similar efficiency, while being CPA-secure in the random oracle model based on a much weaker assumption. 
+\end{abstract}
+\newpage
+
+\section{Introduction}
+Cryptographic schemes based on the polynomial learning with errors problem (PLWE) \cite{10.1007/978-3-642-10366-7_36} and the ring learning with errors problem (RLWE) \cite{LPR10}  have the advantage of having quasi-linear key size and algorithm runtime. However, their security guarantees are not as strong as that of the original learning with errors problem (LWE) \cite{Reg05}. 
+
+One of the main differences between these two settings is that the PLWE problem parametrized by some (say, irreducible) polynomial $f$, denoted $\text{PLWE}^{(f)}$, is only known to be as hard as a worst-case problem on some class of lattices \emph{that depends on the polynomial $f$}, which could possibly be easier to solve for some choices of $f$ as compared to others. %For example, if $f$ has a linear factor over the integers, then it is well known that $\text{PLWE}^{(f)}$ are computationally easy. On the other hand, if $f$ is irreducible, then $PLWE^{(f)}$ enjoys a reduction to worst-case lattice problem $\text{ApproxSVP}^{(f)}$ defined on lattice that corresponds to ideals of $\Z[x]/f.$
+On the other hand, it is known that the LWE problem, for essentially any choice of possible modulus $q$, is as hard as worst-case problems on \emph{arbitrary} lattices \cite{Reg05, PRSD17}. As a result, the concrete efficiency gains of RLWE and PLWE have only been obtained through a trade-off involving making both quantitatively and qualitatively more questionable security assumptions.
+
+%\vnote{need to write a bit more here to motivate middle product.}
+
+%with polynomial $f$ satisfying certain conditions on its degree, expansion factor and constant coefficient,
+
+Recently, \cite{MPLWE} introduced the ``middle-product learning with errors'' assumption (MP-LWE), a new variant of LWE that uses the ``middle product'' of polynomials modulo $q.$ For any $f$ in a broad class of polynomials, they show a reduction from $\text{PLWE}^{(f)}$ to the MP-LWE problem, which is defined independently of any such $f.$ They also describe a public key encryption (PKE) scheme that has quasi-linear (optimal) key size and algorithm runtime, while being IND-CPA secure under the MP-LWE assumption. Thus, they obtain a public-key encryption scheme with the same efficiency gains over LWE-based PKE as enjoyed by PLWE-based schemes, but prove security under a worst-case assumption on a comparatively broader class of lattices. %That is, , compared to PKE schemes based on PLWE, \cite{MPLWE}'s PKE scheme is similarly efficient yet has a stronger security guarantee. %Thus, they achieve a quasi-optimal encryption scheme
+
+%\vnote{very nice. you should have a table with the key sizes, CT sizes and running times for us versus LWE versus Ring LWE. For LWE, the best known are from Peikert-Vaikuntanathan-Waters 2008 Crypto.}
+
+
+
+
+\subsection{Our Results and Techniques} 
+
+We construct an Identity-Based Encryption (IBE) scheme based on MP-LWE. This scheme is IND-CPA secure in the random oracle model under the MP-LWE assumption and has quasi-linear key size and algorithm runtime. Our construction follows the ``lattice trapdoors'' paradigm of \cite{trapdoor}. Specifically, we construct a "dual" of the public key encryption scheme in \cite{MPLWE}, then combine the dual scheme with Micciancio-Peikert style lattice trapdoors \cite{MP} to obtain the IBE scheme. 
+
+In adapting lattice trapdoors to the MP-LWE setting, we encounter technical difficulties stemming from the fact that the middle product of polynomials (see Definition \ref{def:MP}) is not associative. It instead satisfies a property of the following form: for any polynomials $r,a,s$ obeying certain bounds on their degrees,  $r \middleProduct{d} (a \middleProduct{d+k} s ) = (r \cdot a) \middleProduct{d} s.$ in handling these difficulties, we rely on a non-standard variant of the Leftover Hash Lemma (LHL) to ensure that the "dual" scheme's public key is statistically indistinguishable from random. We state and prove this variant of the LHL in Section \ref{sec:lhl}. The proof technique is inspired by \cite{Mic12}.%This is necessary as the "dual" scheme's public will act as the identity \textit{id} for the IBE scheme. 
+
+\jnote{Another technical issue is the degree changes in our polynomial products. PLWE operate in $\Z_q[x]/f$ so degree of poly is immaterial, but we are multiply polynomials in $\Z_q[x].$ Thus, we need variant of MPLWE hardness for middle products of different degrees (show in section 3). We also need to show how the trapdoor construction for matrix can be applied for polynomial in $\Z_q[x]$ (section 5).}
+
+
+Our IBE scheme demonstrates that the better efficiency/security trade-off obtained by \cite{MPLWE} for public key encryption can be extended to more expressive cryptographic primitives such as IBE. 
+
+Tables \ref{tab:pke-efficiency} and \ref{tab:ibe-efficiency} compare the efficiency of our PKE and IBE schemes to prior works. See Section~\ref{subsec:IBEdef} for the formal construction of our IBE scheme.
+
+\begin{table}[h]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+    \hline
+          IBE scheme  & LWE based \autocite{trapdoor} & RLWE based \autocite{} & \makecell{MP-LWE based \\(this work)} \\
+         \hline
+         mpk size & $\tilde{O}(n^2)$ & $\tilde{O}(n)$ & $\tilde{O}(n)$\\
+         \hline
+         msk size & $\tilde{O}(n^2)$ & $\tilde{O}(n)$ & $\tilde{O}(n)$\\
+         \hline 
+        \makecell{IBEExtract's \\
+        runtime} & $\tilde{O}(n^2)$ & $\tilde{O}(n)$ & $\tilde{O}(n)$\\
+        \hline
+    \end{tabular}
+    \caption{Summary of parameters of our identity-based encryption (IBE) scheme from MP-LWE versus prior ones that are from LWE and Ring-LWE.}
+    \label{tab:ibe-efficiency}
+\end{table}
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+    \hline
+          PKE scheme  & LWE based \autocite{PVW08} & RLWE based \autocite{} &\makecell{MP-LWE based ("primal"-\autocite{MPLWE},\\ "dual"-this work)} \\
+         \hline
+         pk size & $\tilde{O}(n^2)$ & $\tilde{O}(n)$ & $\tilde{O}(n)$\\
+         \hline
+         sk size & $\tilde{O}(n)$ & $\tilde{O}(n)$ & $\tilde{O}(n)$\\
+         \hline 
+        Ciphertext expansion factor & $O(1)$ & $\tilde{O}(1)$ & $\tilde{O}(1)$\\
+        \hline
+        Enc/Dec runtime & \makecell{$\tilde{O}(n)$-amortized \\ per encrypted bit} & $\tilde{O}(1)$ & $\tilde{O}(1) $\\
+        \hline
+    \end{tabular}
+    \caption{Summary of parameters of our "dual Regev"-like public encryption scheme from MP-LWE versus prior ones.}
+    \label{tab:pke-efficiency}
+\end{table}
+
+\section{Preliminaries}
+\paragraph{Negligible Functions.}
+We use $n$ to denote the security parameter. We use standard big-O notation to classify the growth of functions, and say that $f(n) = \tilde{O}(g(n))$ if $f(n) = O(g(n) \cdot \log^c n)$ for some fixed constant c. We let $\text{poly}(n)$ denote an unspecified function
+$f(n) = O(n^c)$ for some constant c. We say that a function $f(n)$ is {negligible} (denoted $f(n) = \negl{n}$) if $f(n) = o(n^{-c})$ for every fixed constant c. %For a function $f(n),$ we use $\omega(f(n))$ to denote a function $g(n)$ satisfying $g(n) = \omega(f(n)).$ 
+We say that a probability (or fraction) is overwhelming if it is
+$1 -\negl{n}.$
+
+\paragraph{Statistical and Computational Indistinguishability.} The statistical distance between two distributions $X$ and $Y$ over a countable domain $\Omega$ is defined to be $\Delta (X, Y):=\frac 1 2 \cdot \sum_{d\in \Omega} \abs{X(d) - Y (d)}.$ We say that two distributions $X, Y$ (formally, two ensembles of distributions indexed by $n$) are statistically indistinguishable if $\Delta(X, Y) =\negl{n},$ and write $X \approx_s Y.$
+
+Two ensembles of distributions $\{X_n\}$ and $\{Y_n\}$ are computationally indistinguishable if for every probabilistic poly-time machine $A$, $|\Pr[A(1^n , X_n) = 1] - \Pr[A(1^n
+, Y_n) = 1]|=\negl{n};$ we denote this relationship by $X\approx_c Y.$  
+
+\paragraph{Polynomials.} Let $R$ be a ring. For $k > 0,$ and any set $S \subseteq R,$ we let $S^{<k}[x]$ denote the set of polynomials in $R[x]$ of degree $< k$ whose coefficients are in $S.$ Given a polynomial $a =\sum_{i=0}^{k-1} a_i x^i \in R^{< k}[x],$ define the coefficient vector of $a$ as $\textbf{a}:=(a_0,\cdots, a_{k-1})^T \in R^k.$ In particular, for any $0\leq i \leq k-1$, $\textbf{a}_i$ denotes the coefficient of $x^i$ in $a.$
+
+\paragraph{Probability.} 
+
+For any distribution $X$ defined on a countable domain $\Omega$, we define the \emph{collision probability} 
+\[\cp(X): = \underset{X, X' \text{ i.i.d.}}{\Pr}[X = X']
+\]
+as well as the \emph{Renyi entropy} of $X$,
+\[ H_2(X) := \log_2\frac 1 {\cp(X)},
+\]
+and the \emph{min-entropy} of $X$,
+\[ H_\infty(X) := \log_2 \underset{x \in \Omega}{\min} \frac 1 { {\Pr} [X = x]}.
+\]
+
+For a finite set $\Omega,$ we let $U(\Omega)$ denote the uniform distribution over $\Omega.$ For a distribution $\chi$ over $\R,$ let $\chi^k$ denote the distribution over $\R^k$ where each coordinate is independently sampled from $\chi.$ For a distribution $D$ over $\R^k,$ let $D[x]$ be the distribution over $\poly{\R}{k}$ where the coefficient vector of polynomials is sampled from $D.$
+
+
+
+
+
+\subsection{Identity-Based Encryption} \label{subsec:IBEdef}
+We recall the standard syntax and definition of security under chosen-plaintext and chosen-identity attack \cite{BF03, ABC+05} for IBE. An IBE scheme consists of four algorithms.
+\begin{itemize}
+    \item  The setup algorithm $\Setup$ (on input $1^n$) outputs a master public key $\mpk$ and master secret key $\msk$.
+    \item The secret key extraction algorithm $\Extract$, given $\msk$ and an identity $\id$, outputs a secret key $\sk_{\id}$.
+    \item An encryption algorithm $\Enc$, given the master public key $\mpk$, an identity $\id$, and a message $m$, outputs a ciphertext $c$.
+    \item  A decryption algorithm $\Dec$, given the secret key $\sk$ and a ciphertext $c$, outputs a message $m$.
+\end{itemize}
+We require that an IBE scheme $\mathsf{IBE} = (\Setup, \Extract, \Enc, \Dec)$ satisfies two properties.
+
+\begin{itemize}
+    \item \textbf{Correctness:} For all identities $\id$ and messages $m$, we have
+    \[ \Pr[\Dec(\sk_{\id}, \Enc(\mpk, \id, m)) = m] = 1-\negl n,
+    \]
+    where the probability is taken with respect to the randomness of $\Setup, \Extract, \Enc$, and $\Dec$.
+    \item \textbf{Security:} Security is defined by the following game (defined for a given PPT adversary $\mathcal A$). 
+    \begin{itemize}
+        \item $(\mpk, \msk) \gets \Setup(1^n)$ is sampled. Define a (randomized) oracle $\mathcal O(\cdot)$ that on input $\id$ outputs $\Extract(\msk, \id)$. 
+        \item $\mathcal A^{\mathcal O(\cdot)}(\mpk)$ outputs a challenge $(\id^*, m_0, m_1)$. 
+        \item $b\gets U(\{0, 1\})$ is sampled uniformly at random.
+        \item $\ct^* \gets \Enc(\mpk, \id^*, m_b)$ is sampled. 
+        \item $\mathcal A^{\mathcal O(\cdot)}(\ct^*)$ outputs a bit $b'$ and wins if (1) $\mathcal O(\id^*)$ was not queried and (2) $b' = b$. 
+    \end{itemize}
+We say that the scheme is secure if every PPT adversary $\mathcal A$ wins the above game with probability at most $\frac 1 2 + \negl n$
+\end{itemize} 
+% middle product multiplication $\odot$ and error distribution $\chi$ are defined as in Middle Product primal scheme (see section 4 of that paper). By lemma 3.3 (also from that paper), $\odot$ is commutative, distributive and satisfy $r \odot (a \odot s) = (r \cdot a) \odot  s$
+
+
+\subsection{Middle Product of Polynomials \cite{MPLWE}}
+\begin{definition}[\cite{MPLWE}, Definition 3.1] \label{def:MP}
+Let $d_a, d_b, d, k$ be integers such that $d_a + d_b -1 = d+2k.$ The middle product $\odot_d: \poly{R}{d_a} \times \poly{R}{d_b} \to \poly{R}{d} $ is defined to be the map
+$$(a,b) \mapsto a \middleProduct{d} b = \lfloor \frac{(a\cdot b) \!\mod x^{k+d} }{x^k} \rfloor = \sum_{k\leq i+j\leq k+d-1} (\textbf{a}_i \textbf{b}_j) x^{i+j},$$
+where $\textbf{a}$ and $\textbf{b}$ are the coefficient vectors of $a$ and $b$, respectively. In other words, $a \middleProduct{d} b$ is obtained by deleting the $k$ highest and $k$ lowest degree terms of the polynomial product $a\cdot b,$ then dividing the remaining $d$ terms by $x^k.$
+\end{definition}
+Immediately from Definition~\ref{def:MP}, the middle product is commutative, i.e., $a \middleProduct{d} b = b\middleProduct{d} a$ for all polynomials $a,b.$ The middle product also satisfies a ``quasi-associative'' property.
+\begin{lemma}[\cite{MPLWE}] \label{lemma:mpAssoc} 
+Let $d, k, n > 0.$ For all $r \in \poly{R}{k+1}, a \in \poly{R}{n}, s \in \poly{R}{n+d+k-1},$ we have 
+$$r \middleProduct{d} (a \middleProduct{d+k} s ) = (r \cdot a) \middleProduct{d} s.$$ 
+\end{lemma}
+% \begin{proof}
+% Consider the coefficient vector $\textbf{r}, \textbf{a}, \textbf{s}$ of $r,a,s$ respectively. Note that the polynomial product $f=r \cdot a \cdot s $ can be written as $\sum_{u,v,w} \textbf{r}_u \textbf{a}_v \textbf{s}_w x^{u+v+w}.$ By definition \ref{def:MP}, the LHS and RHS can be obtained from $f$ by deleting terms of certain degree. More concretely, we can write:
+% $$r \middleProduct{d} (a \middleProduct{d+k} s ) = \sum_{(u,v,w) \in P} \textbf{r}_u \textbf{a}_v \textbf{s}_w x^{u+v+w}  ; (r \cdot a) \middleProduct{d} s= \sum_{(u,v,w) \in Q} \textbf{r}_u \textbf{a}_v \textbf{s}_w x^{u+v+w} $$
+% for set $P, Q$ of indices where:
+% \begin{align*}
+% Q &= \{(u,v,w )\, | \, n+k-1\leq u+v+w \leq n+k+d-2 \}\\
+% P &= Q \cap \{(u,v,w)\, |\, n- 1\leq v+w\leq n+ k+d-2\}
+% \end{align*}
+% Clearly, $P\subseteq Q.$ We only need to show that $Q=P$. Consider $(u,v,w) \in Q$. Since $0\leq u \leq k=\deg r-1$:
+% $$n-1\leq (u+v+w)-k\leq v+w \leq (u+v+w)-0 = n+k+d-2$$
+% thus $(u,v,w) \in P.$
+% \end{proof}
+\subsection{Lattices}\label{subsec:lattice}
+An $n$-dimensional lattice $\Lambda$ is a discrete additive subgroup of
+$\mathbb R^n.$ A lattice has rank $k\leq m$ if it is generated as the set of all $\Z$-linear combinations of some $k$ linearly independent \textit{basis} vectors $\textbf{B} = (\textbf{b}_1, \cdots, \textbf{b}_k);$ we say $\Lambda$ is full-rank if $k=m.$ The dual lattice $\Lambda^*$ is the set of all $v \in \text{Span}_{\mathbb R}(\Lambda)$ such that $\langle v, x \rangle \in \Z$ for every $x\in \Lambda.$ If \textbf{B} is a basis of $\Lambda,$ then $\textbf{B}^*=B(B^t B)^{-1}$ is a basis of $\Lambda^*.$ Note that when
+$\Lambda$ is full-rank, \textbf{B} is invertible and hence $\textbf{B}^*=\textbf{B}^{-1}.$
+
+For any set $\textbf{S}=(s_1, \cdots, s_k)$ of linearly independent vectors, let $\tilde{\textbf{S}}$ denote its Gram-Schmidt orthogonalization, defined iteratively in the following way: $\tilde{s}_1 = s_1 ,$ and for each $i=2, \cdots, n,$ $\tilde{s}_i$ is the component of $s_i$ orthogonal to $\text{span}(s_1,\cdots, s_{i-1}).$
+
+For positive integers $n,q$ and any matrix $A \in \Z_q^{n\times m},$ let $\Lambda^{\perp}(A): = \{z \in \Z^m: Az = 0\mod q \} .$ For $u\in \Z_q^n$ such that $\exists t \in \Z_q^m$ satisfying $A t = u,$ let $\Lambda^{\perp}_u(A) : = \{ z\in \Z^m: Az = u \mod q\} = \Lambda^{\perp}(A) +t. $
+
+\subsubsection{(Discrete) Gaussian Distribution}
+\begin{definition}[Gaussian distribution]
+Given countable set $S \subset \R^n$ and $s>0$, the Gaussian distribution $D_{S,\sigma, \textbf{c}}$ is the probability distribution over $S$ whose density is proportional to $\rho_{\sigma,\textbf{c}}(x):=\exp(-\pi\cdot \dabs{\textbf{x}- \textbf{c}}^2/\sigma^2).$ %When $\Sigma = s^2 I_n$ we write $\rho_s$ and $D_s$ instead of $\rho_{\Sigma}$ and $D_{\Sigma}$ respectively.
+That is, for $x \in S: D_{S,\sigma, \textbf{c}} = \frac{\rho_{\sigma,\textbf{c}}(x)}{\rho_{\sigma,\textbf{c}}(S)}.$
+If $\textbf{c} = 0$, we can omit $\textbf{c}$ and write $D_{S, \sigma}$ instead. If $S = \R^n,$ we can omit $S$ and write $D_{\sigma}.$ \anote{Something is inconsistent here. Do we want to limit ourselves to countable $S$? If so, then we can't have $S = \mathbb R^n$.} \jnote{should we split it into "Continuous Gaussian (over Rn)" and "Discrete Gaussian". Also, does this def. support $D_{\Z_q, \sigma}$? Can't say $\Z_q \subseteq \R.$ Quick fix (used in Lemma \ref{lemma:clmpmf}): $D_{\Z_q, \sigma} = D_{\Z, \sigma} \mod q.$} \anote{Yeah, I would just give different definitions for continuous and discrete Gaussians. I'm not sure what $D_{\Z_q, \sigma}$ should mean (other than $D(x) = \sum_{y\equiv x \pmod q} D_{\Z, \sigma}(y)$, as you suggest). Given a subspace $V \subset \Z_q$, the integer lattice usually considered is the lattice generated by $V$ and $q$ times the standard basis elements. I don't see how Lemma 2.5 uses anything about $\Z_q$.} \jnote{sorry, I meant Lemma 4.2.}
+\end{definition}
+As usual, we will make use of various statistical properties of the discrete Gaussian $D_{\Lambda, \sigma}$ when $\sigma$ is large compared to the \emph{smoothing parameter} of the lattice $\Lambda$, defined below. 
+\begin{definition}[\cite{MR07}] \label{def:eta}
+For any $n$-dimensional lattice $\Lambda$ and real $\epsilon > 0,$ the smoothing parameter $\eta_{\epsilon}(\Lambda)$ is defined to be the smallest real $s> 0$ such that $\rho_{1/s} (\Lambda^*\setminus \{\textbf{0}\}) \leq \epsilon.$ 
+\end{definition}
+The following lemma gives an upper bound on the smoothing parameter of $\Lambda$ in terms of its Gram-Schmidt basis $\tilde B$. 
+\begin{lemma}[\cite{trapdoor}, Theorem 3.1] \label{lemma:eta}
+Let $\Lambda \subset \R^n$ be a lattice with basis $\mathbf{B}$ and real $\epsilon > 0$. Then, 
+\[
+\eta_{\epsilon} (\Lambda) \leq \dabs{\tilde{\mathbf{B}}} \cdot \sqrt{\ln (2n(1+\epsilon^{-1}) )/ \pi}.
+\]
+where $\tilde{\mathbf{B}} = (\tilde{b}_1, \cdots, \tilde{b}_k)$ is the Gram-Schmidt orthogonalization of $\mathbf{B}$ as defined in Section \ref{subsec:lattice}, and $\dabs{\tilde{\mathbf{B}}}  = \max_{i\in [k]} \dabs{\tilde{b}_i}.$
+\anote{What norm of $\tilde B$ is meant here?} \jnote{I corrected this}
+
+\end{lemma}
+We will make use of tail bounds on $D_{\Lambda, \sigma}$ (for $\sigma$ larger than the smoothing parameter). 
+\begin{lemma}[\cite{trapdoor}, Lemma 2.9] \label{lemma:tailIneq}
+For any $\epsilon$ > 0, any $\sigma \geq \eta_{\epsilon}(\Z)$, and any $t > 0$, we have
+$$\underset{x\sample D_{\Z,\sigma,c}}{\Pr}\left[\abs{x -c} \geq t \cdot \sigma\right] \leq 2e^{-\pi t^2}\cdot \frac{1+\epsilon}{1-\epsilon}.$$
+In particular, for $\epsilon\in (0,1/2
+)$ and $t \geq \omega(\sqrt{\log n})$, the probability that $\abs{x - c} \geq t \cdot \sigma$ is negligible in $n$.
+
+\end{lemma}
+
+In addition, we will make use of \emph{entropy} bounds on $D_{\Lambda,\sigma}$ (again for $\sigma$ sufficiently large). In order to prove these bounds, we first recall the following approximation. 
+\begin{lemma}[\cite{Peikert:2006:ECH:2180286.2180297}, Lemma 2.10] \label{lemma:rho}
+Let $\Lambda\subset \R^d$ be a full-rank lattice. For any $s \geq \eta_{\epsilon} (\Lambda)$, we have  
+$$s^d \det(\Lambda^*) \cdot (1-\epsilon) \leq \rho_{ s}(\Lambda) \leq s^d \det(\Lambda^*) \cdot (1+\epsilon).$$
+\end{lemma}
+Using Lemma~\ref{lemma:rho}, we can bound $H_\infty(D_{\Lambda, \sigma})$ and $H_2(D_{\Lambda, \sigma})$. 
+\begin{lemma} \label{lemma:clmpmfbound}
+%For distribution $\chi$ over a full-rank lattice $\Lambda \subset \R^d,$ let $\cp(\chi): = \underset{X, X' \sim \chi}{\Pr}[X = X'], H_\infty(\chi) := \log \frac 1 {\max_{x \in \Z^d} \underset{X \sim \chi}{\Pr} [X = x]} $ be the probability of collision and maximum probability mass respectively. 
+For a full-rank lattice $\Lambda \subset \mathbb R^d$ and discrete Gaussian distribution $\chi = D_{\Lambda, \sigma}$ with parameters $ \epsilon\in (0,1), \delta \in (0,1),$ and $\sigma \geq \max(\sqrt{2}, \delta^{-1})\cdot \eta_{\epsilon}(\Lambda)$, we have \anote{I changed the theorem slightly}
+\[2^{-H_\infty(\chi)} \leq \delta^{d} \frac{1 + \epsilon}{1-\epsilon}
+\]
+and 
+\[\cp(\chi) \leq \left(\frac \delta {\sqrt 2}\right)^{d} (\frac{1 + \epsilon}{1-\epsilon})^2.
+\]
+\end{lemma}
+\begin{proof}
+Using Lemma \ref{lemma:rho}, we obtain the bound
+\[D_{\Lambda,\sigma} (\textbf{x}) \leq \frac{1}{\sigma^d \det(\Lambda^*) \cdot (1-\epsilon) }
+\]
+for all $\textbf{x} \in \Lambda$. %since $\rho_{\sigma}(\textbf{x}) \leq \rho_{\sigma}(\textbf{0}) =1$ and by Lemma \ref{lemma:rho}. 
+ Moreover, we assumed that $\sigma \delta \geq \eta_\epsilon(\Lambda)$, so by Lemma~\ref{lemma:rho} we also have
+\[
+1\leq \rho_{\sigma\delta}(\Lambda) \leq (\sigma \delta)^d \det(\Lambda^*) \cdot (1+\epsilon).
+\]
+Combining this with the first inequality, we see that
+\[
+D_{\Lambda,\sigma} (\textbf{x})\leq \delta^d \frac{1+\epsilon}{1-\epsilon},
+\]
+yielding the desired bound on $2^{-H_\infty(\chi)}$. In order to bound $\cp(\chi)$, we write 
+
+\[\cp(\chi) = \sum_{x \in \Lambda} D_{\Lambda, \sigma}(x)^2=\rho_{\sigma}(\Lambda)^{-2} \sum_{x\in \Lambda} \rho_{\sigma} (x)^2 = \rho_{\sigma }(\Lambda)^{-2} \cdot \rho_{\sigma/\sqrt{2} }(\Lambda),
+\]
+where the last equality uses the identity $\rho_{\sigma }(x)^2 = \rho_{\sigma/\sqrt{2} } (x)$. Since we assumed that $\sigma > \delta \sigma \geq \eta_{\epsilon}(\Lambda),$ Lemma~\ref{lemma:rho} (applied three times, to parameters $\sigma$, $\frac \sigma {\sqrt 2}$ and $\sigma \delta$) tells us that
+
+\begin{align*}
+\rho_{\sigma }(\Lambda)^{-2} \rho_{\sigma/\sqrt{2} }(\Lambda)&\leq \frac{(\sigma/\sqrt{2})^d \det (\Lambda^*) (1+\epsilon) }{\sigma^{2d} \det^2 (\Lambda^*) (1-\epsilon)^2} 
+\\ &= \left(\frac \delta {\sqrt 2}\right)^d \left(\frac{1+\epsilon}{1-\epsilon}\right)^2 \frac{1}{( \sigma \delta)^d \det(\Lambda^*) (1+\epsilon) } 
+\\ &\leq \left(\frac {\delta}{\sqrt 2}\right)^d (\frac{1+\epsilon}{1-\epsilon})^2,
+\end{align*}
+completing the proof. %Note that if $v \in \Lambda^*$ then 
+\end{proof}
+\subsection{Polynomials and Matrices}
+For a vector $\textbf{v} \in \R^n$, let $\dabs{v}, \dabs{v}_{\infty}$ denote the Euclidean and sup norm respectively. We define the largest singular value of a matrix $A\in \R^{m\times n}$ as $\sigma_1(A) : = \max_{\dabs{u} = 1} \dabs{A u}.$
+%where $\dabs{\cdot}$ defined the Eucledian norm.
+
+\begin{lemma} \label{lemma:singVar}
+For any matrix $A \in \R^{m\times n},$ we have $\sigma_1(A) \leq \sqrt{mn} \max_{i,j} \abs{A_{ij}}.$ 
+\end{lemma}
+% matrix representation of polynomial
+We will make use of the following matrix representation of polynomial multiplication.
+\begin{definition}
+Let $R$ be a ring and $d, k, > 0$ be positive integers. For any polynomial $f \in \poly{R}{k}$ of degree less than $k$, let $T^{k,d}(f)$ denote the matrix in $R^{ (k+d-1) \times d}$ whose $i$-th column, for $i = 1, \cdots , d,$ is given by the coefficients of $x^{i-1}\cdot f,$ listed from lowest to highest degree. In particular, $T^{k,1}(f)$ is the coefficient vector $\textbf{f}$ of the polynomial $f$ (possibly with zeros appended). 
+\end{definition}
+\begin{lemma} \label{lemma:matpoly}
+For $\ell,k,d > 0, f \in \poly{R}{k}, g \in \poly{R}{\ell},$ $T^{k,\ell+d-1}(f) \cdot T^{\ell,d}(g) = T^{\ell+k-1, d}(f\cdot g). $
+\end{lemma}
+% linear 
+\begin{definition}[\cite{MPLWE}, from \cite{LyuMic06icalp}]
+Let $f\in \Z[x]$ have degree $m.$ The expansion factor of $f$ is defined as 
+\[\ef(f) := \underset{g\in \poly{\Z}{2m-1}}{\max}\frac{\dabs{g \mod f}_{\infty}} {\dabs{g}_{\infty}}.
+\]
+\end{definition}
+For our purposes, we are interested in polynomials with $\text{poly}(n)$-bounded expansion factors. One such class \cite{LyuMic06icalp} is the family of all $f = x^m + h$ where $\deg(h) \leq m/2$ and $\dabs{h}_{\infty} \leq \text{poly}(n).$
+\begin{definition}
+Let $f$ be a polynomial of degree $m.$ Define the (Hankel) matrix $\textbf{M}_f\in \R^{m\times m} $ such that for $1\leq i,j \leq m,$ $(\textbf{M}_f)_{i,j} $ is the constant coefficient of $x^{i+j-2} \mod f.$ 
+\end{definition}
+We will make use of singular value bounds on $\mathbf M_f$ and related matrices in terms of the expansion factor of $f$. For a matrix $A\in  \R^{m\times n}$ let $A^{(d)}$ denote the matrix whose rows are the first $d$ rows of $A.$ 
+%\vnote{Better by a factor of $\sqrt{d}$.}
+\begin{lemma} \label{lemma:ef}
+For any $f\in \Z[x]$, $\sigma_1(\textbf{M}_f^{(d)}) \leq \sqrt{d} \ef(f).$
+\end{lemma}
+\begin{remark} This inequality generalizes and improves on \autocite[Theorem 2.8]{MPLWE} by a factor of $\sqrt{d}.$
+
+\end{remark}
+\begin{proof}
+We want to show that for all nonzero vectors $u\in \R^m$, the following inequality holds:
+\[
+\frac{\dabs{\textbf{M}_f^{(d)} u}}{\dabs{u}} \leq \sqrt{d} \ef(f).
+\]
+We first note that because $\mathbb Q$ is dense in $\R$, it suffices to show the same inequality for all nonzero $u\in \mathbb Q^n$. Moreover, since the inequality is scale-invariant, we may further reduce to the case where $u\in \Z^m$. 
+
+Given any nonzero vector $u\in \Z^m$, we define $v := \textbf{M}_f u$. Then, letting $g\in \poly{\R}{m}$ denote the degree $<m$ polynomial with coefficient vector $u$, we know by \autocite[Lemma 2.4]{MPLWE} that $v_i$ is the constant coefficient of $x^{i-1}\cdot g \mod f$.  Thus,
+\[ |v_i| \leq \dabs{g \cdot x^{i-1} \mod f}_{\infty} \leq \ef(f) \dabs{x^{i-1}\cdot g}_{\infty} = \ef(f) \dabs{u}_{\infty}.
+\]
+We conclude that 
+\[
+\frac{\dabs{\textbf{M}_f^{(d)} u}}{\dabs{u}} \leq \sqrt{d} \frac{\dabs{u}_{\infty}}{\dabs{u}} \ef(f) \leq \sqrt{d} \ef(f),
+\]
+where the last inequality holds because $\dabs{u}_{\infty}\leq \dabs{u}.$
+\end{proof} 
+\section{Hardness of NMP-LWE}
+In this section, we define and consider a variant of MP-LWE 
+\begin{definition}[PLWE] \label{def:PLWEAssumption}
+Let $q \geq 2, m > 0, $ $f$ a polynomial of degree $m,$ $\chi$ a distribution over $\R[x]/f.$ The decision $\text{PLWE}^{(f)}_{q, \chi}$ consists in distinguishing between arbitrarily many samples $$\{a \sample U(\Z_q[x]/f), e \sample \chi: (a,a\cdot s + e) \}$$ and the same number of samples from $U(\Z_q[x]/f \times \R_q[x]/f)$ with non-negligible probability over choice of $s\sample U(\Z_q[x]/f).$
+\end{definition}
+\begin{definition}[NMP distribution and NMP-LWE]
+Let $\ell > 0, q \geq 2, t >0, \textbf{n} \in (\Z\cap [\ell/2,\ell])^t, \chi$ a distribution over $\Z_q,$ $\textbf{d} \in \Z^t$ be such that $\textbf{d}_i = \ell-\textbf{n}_i$ for each $i\in [t].$ For $s \in \poly{\Z_q}{\ell-1},$ define the distribution $\NMP^{\ell}_{q,t,\textbf{n},\chi}(s)$ over $\prod_{i=1}^m (\poly{\Z_q}{\textbf{n}_i} \times \poly{\Z_q}{\textbf{d}_i})$ as the one obtained by: for each $i\in [t],$ sampling $a_i \leftarrow U(\poly{\Z_q}{\textbf{n}_i}), e_i \leftarrow P(\chi^{\textbf{d}_i})$ and returning $b_i = a_i \middleProduct{\textbf{d}_i} s + e_i . $
+
+The NMP-LWE problem consists of distinguishing between arbitrarily many samples from $\NMP^{\ell}_{q,t,\textbf{n},\chi}(s)$ and the same number of samples from $\prod_{i=1}^m U(\poly{\Z_q}{\textbf{n}_i} \times \poly{\Z_q}{\textbf{d}_i}).$
+\end{definition}
+\begin{theorem}[Hardness of NMP-LWE] \label{thm:mplwe}
+Let $\ell > 0, q \geq 2, t >0, \textbf{n} \in (\Z\cap [\ell/2,\ell])^t, \alpha \in (0,1), \textbf{d} \in \Z^t$ be such that $\textbf{d}_i = \ell-\textbf{n}_i$ for each $i\in [t].$ For $S >0,$ let $\mathcal{F}(S, \textbf{d}, \textbf{n})$ be the set of polynomials in $\Z[x]$ that are monic, have constant coefficient coprime with $q$, have degree $m$ in $\bigcap_{i=1}^t [\textbf{d}_i, \textbf{n}_i]$ and satisfy $EF(f) < S.$ Then there exists a ppt reduction from $\PLWE{D_{\alpha\cdot q}}{f}$ for any $f \in \mathcal{F}(S, \textbf{d}, \textbf{n})$ to $\text{NMP-LWE}_{q,t,\textbf{n},D_{\alpha'\cdot q} }$ where $\alpha' = \alpha \cdot \frac{\ell}{2} \cdot S.$
+\end{theorem}
+
+\begin{proof}
+For $n \in [\ell/2, \ell]\cap \Z$ and $d=\ell -n$, we describe a ppt mapping $\phi_{n,d}$ that maps a pair $(a, b) \in \Z_q[x]/f \times \Z_q[x]/f$ to $(a',b')\in \poly{\Z_q}{n} \times \poly{\Z_q}{d}$, such that $\phi$ maps $U(\Z_q[x]/f \times \Z_q[x]/f)$ to $U(\poly{\Z_q}{n} \times \poly{\Z_q}{d})$ and $\text{P}_{q,D_{\alpha\cdot q} }^{(f)}(s)$ to $\MP{n}{d}{\chi'}(s')$ where $s'$ only depends on $s.$ This mapping was previously defined in \cite{MPLWE}.
+
+Let $(a, b) \in \Z_q[x]/f \times \Z_q[x]/f$ be an input pair. Let $m$ be the degree of $f$. For any $k>0$, let $\textbf{J}_k$ denote the anti-diagonal matrix of dimension $k \times k$. Let $\Sigma = ( \alpha' \cdot q)^2 \textbf{I} - (\alpha \cdot q)^2 \textbf{J}_d \cdot \textbf{M}^d_f .$ %[show $\Sigma$ is positive definite]
+Then $\Sigma $ is positive definite because by Lemma \ref{lemma:ef} $s_1((\alpha \cdot q)^2 \textbf{J}_d \cdot \textbf{M}^d_f)\leq (\alpha\cdot q) s_1( \textbf{J}_d  ) s_1(\textbf{M}^d_f) \leq (\alpha \cdot q)  (d EF(f)) < \alpha'\cdot q.$ 
+
+Sample $h \leftarrow U(\poly{\Z_q}{n-m}), \epsilon\leftarrow D_{\Sigma,d} $ and set $\phi_{n,d} (a, b) = (a', b')$ where
+$$a' = a + h \cdot f , \> \textbf{b}' =\textbf{J}_d \cdot  \textbf{M}^{d}_f \cdot \textbf{b}  + \epsilon$$
+As $a$ and $h$ are uniformly random distributed in $\poly{\Z_q}{m}$ and $\poly{\Z_q}{n-m}$ respectively, $a'$ is uniformly distributed over $\poly{\Z_q}{n}.$ Moreover, if $b$ is uniformly distributed in $\Z_q[x]/f,$ then $b$ is uniformly distributed over $\poly{\Z_q}{d}.$ Indeed, assume $b$ is uniformly distributed, then its coefficient vector $\textbf{b}$ is uniformly distributed in $\Z_q^m.$ Rearranging the columns of $M_f$ gives a triangular matrix whose diagonal is the constant coefficient of $f$, which is coprime with $q$ so $M_f$ is invertible modulo $q.$ Since $\textbf{J}$ and $\textbf{M}_f$ are invertible, $\textbf{J}_d \cdot  \textbf{M}^{d}_f \cdot \textbf{b} $ is uniformly distributed (over $\Z_q^d$) thus so is $ \textbf{b}'$ and its polynomial representation $b'$.
+
+Suppose $b = a \cdot s + e$ for $s\in \Z_q[x]/f, e \leftarrow P(\chi^d).$ Let $s'\in \poly{\Z_q}{\ell-1}, e'\in \poly{\R_q}{d}$ such that their coefficient vectors satisfy
+$$ \textbf{s}'= \textbf{J}_{\ell-1} \cdot( \text{Rot}^{\ell-1}_f (1) \cdot \textbf{M}_f \cdot s), \> \textbf{e}' = \textbf{J}_d \cdot \textbf{M}^d_f \cdot \textbf{e} + \epsilon.$$
+
+We refer to \cite{MPLWE} for the proof that $b' = a'\middleProduct{d}s' + e'.$ Since $\epsilon$ is sampled independent of $\textbf{e}$, the distribution of $\textbf{e}'$ is $D_{\alpha'\cdot q}.$
+
+Having defined this mapping, the reduction is as follow:
+\begin{itemize}
+    \item Sample $ t \leftarrow \poly{\Z_q}{\ell-1}.$
+    \item Each time the NMP-LWE oracle asks for a new sample, ask for $t$ fresh samples $(a_i, b_i)$ and compute $\phi_{\textbf{n}_i, \textbf{d}_i} (a_i, b_i) = (a'_i, b'_i)$ for each $i \in [t].$ Give the $t$ pairs $(a'_i, b'_i + a \odot_{\textbf{d}_i} t)$ to the NMP-LWE oracle as the one requested sample.
+    \item When MP-LWE oracle terminates, return its output.
+\end{itemize}
+By definition of $\phi_{\textbf{n}_i, \textbf{d}_i},$ the reduction maps $t$ uniform samples $\Z_q[x]/f \times \Z_q[x]/f $ to $\prod_{i=1}^t U(\poly{\Z_q}{\textbf{n}_i} \times \poly{\Z_q}{\textbf{d}_i}) $ and $t$ samples from $\text{P}^{(f)}_{q,D_{\alpha \cdot q}}(s)$, for a uniform $s \in \Z_q[x]/f$ common to all $t$ samples, to a valid sample of $\NMP^{\ell}_{q,t,\textbf{n},  D_{\alpha \cdot q}}(s'+t),$ where $s'+t$ is uniformly random.
+\end{proof}
+\section{Another Leftover Hash Lemma for Polynomials \label{sec:lhl}%--$(a_1, \cdots, a_t, \sum_{i=1}^t a_i r_i)$ nearly uniform
+}
+Let $q$ to be a prime number and $q= poly(n)$, then $\Z_q$ is a field. For $z_1, \cdots, z_t \in \mathbb{Z}_q[x]$, can normalize the leading cofficient so that $\gcd(z_1, \cdots, z_t)$ is monic. 
+ 
+%For any set $D$, let $ \poly{D}{n}$ be the set of polynomials of coefficient in $\mathbb{Z}_q$ and degree $< n.$ All product mention below are polynomial multiplication.
+\begin{lemma}[Range of hash output]\label{lemma:range}
+Consider $n'\leq n$ and $z_1, \cdots, z_t \in \poly{\mathbb{Z}_q}{n'}$ that are not all zero polynomials. Let $$I = \{\sum_{i=1}^t a_i z_i \, | \, a_i\in  \poly{\mathbb{Z}_q}{n} \} $$ and $$J = \{f \in \mathbb{Z}_q[x] \, | \, \deg(f) < n + \max_{i} \deg (z_i) \, \land \, gcd(z_1, \cdots, z_t) \mid f \}$$ then $I = J.$
+
+Moreover, for fixed $z_1, \cdots, z_t$, then $Pr[\sum_{i=1}^t a_i\cdot z_i] =1/\abs{I}$ where the probability is taken over choice of $a_i.$
+\end{lemma}
+\begin{proof}
+Let $g = gcd(z_1, \cdots, z_t)$ be a monic polynomial in $\mathbb{Z}_q[x]$. Since $g$ divides all $z_i$, it also divides $\sum_{i=1}^t a_i z_i$. That $\deg(a_i) < n$ implies $\deg(a_i z_i) < n + \deg(z_i)$ thus $\deg(\sum_{i=1}^t a_i r_i) < \max_i (n+ \deg (z_i)) $. Hence,  $I \subseteq J.$ 
+
+If any $z_i$ is zero, remove it wouldn't change $I$, or $gcd(z_1,\cdots, z_t).$ WLOG, we can assume that every $z_i$ is not zero.
+
+We show that the claim is true when $t =2 $ and $g = 1$. Actually, we show something slightly stronger by allowing maximum degree of $a_1$ and $a_2$ to be different (this is necessary for induction). Then, we write $z_i = g z'_i$ and apply the previous claim to $z'_1$ and $z'_2$ to get that the claim is true when $t=2$, for any $g$. Finally, we use induction on $t$ to get that the claim is true for all $t.$
+ 
+Now, assume $t = 2$ and $g = gcd(z_1, z_2) = 1$. Pick polynomials $a_1, a_2 $ of degree $\geq n'-1$ and perform polynomial division (possible because $q$ is prime) to get $$a_1 = q_ 1z_2 + s_1, a_2 = q_2 z_1 +s_2$$
+
+Note that, as long as $\forall i \in \{1,2\}: \deg(a_i) \geq n'-1 \geq \deg(z_i)$, then $q_1, q_2, s_1, s_2$ can be any polynomials within their respective degree bound  (e.g. for $q_1$, $\deg (q_1) < \deg(a_1) - \deg(z_2)$)
+
+Then $a_1 z_1 + a_2 z_2 = z_1 z_2 (q_1 + q_2) + (s_1 z_1 + s_2 z_2).$
+
+By Chinese remainder theorem, $(s_1 z_1 + s_2 z_2) \mod z_1 z_2$ can be equal to any polynomials of degree $< \deg(z_1 z_2)$. Also, $q_1 + q_2$ can be any polynomial of degree $< \max \{ \deg(a_1) - \deg(z_2), \deg(a_2) - \deg (z_1)\} $, thus $z_1 z_2 (q_1 + q_2)$ can be any polynomial divisible by $z_1 z_2$ of degree 
+$< d$, where 
+$$d= \max\{\deg(a_1) + \max\deg(z_1), \deg (a_2) + \deg (z_2)\}.$$
+Hence $z_1 z_2 (q_1 + q_2) + (s_1 z_1 + s_2 z_2)$ can be any polynomial of degree $< d.$ Thus, we proved the claim when $t=2$. For the induction step, apply the above argument for $t=2$ repeatedly (i.e. $a_1 z_1 + a_2 z_2 +a_3 z_3 = a_{12} gcd(z_1, z_2)  + a_3 z_3$), the final degree bound will be $\max \deg (a_i z_i) = n + \max \deg (z_i).$
+
+The second claim follows from same reasoning as in Lemma 4.4 of \cite{Mic12}. Indeed, for every $b \in I$, let $A_b$ be the set of all
+tuples $(a_1,\cdots, a_t) $ such that $\sum_{i=1}^t a_i \cdot z_i = b$. For any $b\in I$, there exists $a'_1,\cdots, a'_t$ s.t. $\sum_{i=1}^t a'_i \cdot r_i = b$. Then the function $(a_i)_{i\leq t} \mapsto (a_i-a'_i)_{i \leq t}$ is a bijection from $A_b$ to $A_0$, thus $|A_b| = |A_0|$ for every $b\in I$.
+\end{proof}
+ 
+
+% \begin{theorem} \label{thm:lhl}
+% Let $V= (a_1, \cdots, a_t, \sum_{i=1}^t a_i \cdot r_i)$, where each coefficient of $r_i$ is drawn i.i.d. from a distribution $\chi$ over the integer and interpreted as element in $\poly{\mathbb{Z}_q}{n'}.$ Assume that $CL(\chi) = Pr_{x, x' \sim \chi} [x=x' \mod q] \leq \delta  $ and $MPMF(\chi) = \max_{z \in \mathbb{Z}_q} Pr_{x \sim \chi} [x = z \mod q] \leq \delta$ for some $\delta < 1.$ %$s = \omega(\sqrt{\log n})\geq \nu_{\epsilon}(\mathbb{Z})$ for some negligible $\epsilon$ and $s\log n < \frac{q}{2}.$
+
+% For $n'\leq n$ and $t > 0$ satisfy $q^{n+n'-1} \delta^{n' t} =\negl{n}$ and $q^2 \delta^t = \negl{n}.$
+
+% Then the statistical distance between the distribution $V= (a_1, \cdots, a_t, \sum_{i=1}^t a_i r_i)$ and the uniform distribution over $ S=(\poly{\mathbb{Z}_q}{n})^t \times \poly{\mathbb{Z}_q}{n+n'-1}$ is $O(\frac{1}{n^{\log n}})$ i.e. negligible in $n$.
+% \end{theorem}
+% \begin{definition}
+% For a distribution $\chi$ over support space $\Omega,$ let $CL(\chi) = Pr_{x, x' \sim \chi} [x=x' \mod q] $
+% \end{definition}
+\begin{theorem} \label{thm:lhl}
+%Let $\chi$ be a distribution over $\Z, \, CL(\chi,q): = Pr_{x, x' \sim \chi} [x=x' \mod q], MPMF(\chi,q) := \max_{z \in \Z_q} Pr_{x \sim \chi} [x = z \mod q] $ be the probability of collision and maximum probability mass modulo $q$ respectively. Suppose that $CL(\chi,q)$ and $MPMF(\chi)$ are $\leq \delta$ for some $\delta \leq 1.$
+Let $\chi$ be a distribution over $\Z_q$ and $\delta$ is a parameter in  $[0,1]$  such that $\max \{ \cp(\chi), 2^{-H_{\infty}(\chi)} \} \leq \delta. $ Consider distribution $V:= (a_1, \cdots, a_t, \sum_{i=1}^t a_i \cdot r_i)$ over $S = (\poly{\Z_q}{n})^t \times \poly{\Z_q}{n+n'-1},$ where each $a_i, r_i$ are sampled independently from $U(\poly{\Z_q}{n})$ and $\chi^{n'}[x]$ respectively.
+
+For $n' \leq n$ and $t > 0 $ satisfy $q^{n+n'-1} \delta^{n' t} =\negl{n}$ and $q^2 \delta^t = \negl{n},$ then $V \approx_s U(S).$
+
+In particular, for $ \delta^{-1} = \omega(1)$ and $n't/n = \Omega(\log n)$ then the above statement holds.
+\end{theorem}
+\begin{proof}
+%
+%Collision probability: $\delta$
+
+Let $M$ be set of monic poly in $\poly{\mathbb{Z}_q}{n}$. For $f \in M$ and $d \in [n + \deg (f)-1, n+n'-2]$, let $I[f,d]$ be set of polynomials in $\poly{\mathbb{Z}_q}{d+1} $ divisible by $f$. For $(z_i)_{i\leq t} \in  (\poly{\mathbb{Z}_q}{n'})^t \setminus (0)_{i\leq t} $ i.e. not all $z_i$ are zero polynomials, let $I[(z_i)_{i\leq t}] = \{\sum_{i=1}^t a_i z_i \, | \, a_i\in  \poly{\mathbb{Z}_q}{n} \} $. 
+
+By Lemma \ref{lemma:range}, the set $\{ I[(z_i)_{i\leq t}] \, |(z_i)_{i\leq t} \in  (\poly{\mathbb{Z}_q}{n'})^t \setminus (0)_{i\leq t} \}$ is a subset of the set $\mathcal{I}$ of all $I[f,d]$.
+
+By Lemma 4.3 in \cite{Mic12}, we only need to prove that the collision probability for $V$ is close to $\frac{1}{|S|}$, where $\abs{S}= q^{nt} \times q^{n+n'-1}.$
+
+More precisely, let $a_i, a'_i, r_i, r'_i$ be i.i.d. samples from $U(\poly{\mathbb{Z}_q}{n})$ and $\chi^{n'}[x]$ respectively, we want to show:
+\begin{equation} \label{eq:lhlpf}
+    q^{nt +n+n'-1} Pr \left [ \forall i: a_i = a'_i \land \sum_{i=1}^t a_i r_i = \sum_{i=1}^t a'_i r'_i \right] =1+\negl{n} 
+\end{equation}
+Let $P: =  Pr \left [ \forall i: a_i = a'_i \land \sum_{i=1}^t a_i r_i = \sum_{i=1}^t a'_i r'_i \right].$ Since $a_i, a'_i, r_i,r'_i$ are sampled independently, we can rewrite $P$ as product of $A: = \prod_i Pr[a_i = a'_i]$ and $B : = Pr[\sum a_i(r_i-r'_i) =0].$ The former expression evaluates to $(\frac{1}{q^n})^t.$ If not all $(r_i -r'_i)$ are zero polynomials, then by Lemma \ref{lemma:range}, the latter expression $B$ evaluates to $\abs{I}^{-1}$ where $I = I[(r_i-r'_i)_{i\leq t}] \in \mathcal{I}$; conversely, if $I = I[(r_i-r'_i)_{i\leq t}] \in \mathcal{I}$ then $(r_i-r'_i)_{i\leq t} \neq (0)_{i\leq t}.$ On the other hand, the bound on $\cp(\chi)$ implies that  $Pr[(r_i -r'_i)=0] \leq \delta^{n'},$ thus $Pr[\forall i: r_i =r'_i] = (\delta^{n'})^t.$ Hence, we can write $B$ as 
+$$B = Pr[\forall i: r_i =r'_i] + \sum_{I \in \mathcal{I}} Pr\left[\sum a_i(r_i-r'_i) =0 \right] Pr[ I[(r_i-r'_i)_{i\leq t}]  = I ] \leq \delta^{n't} +\underbrace{\sum_{I \in \mathcal{I}} \abs{I}^{-1} Pr[ I[(r_i-r'_i)_{i\leq t}]  = I ]}_{C}.$$
+Clearly $Pr[ I[(r_i-r'_i)_{i\leq t}]  = I ] \leq Pr[ I[(r_i-r'_i)_{i\leq t}]  \subseteq I ].$ Moreover $I[(r_i-r'_i)_{i\leq t}]  \subseteq I$ if and only if $(r_i -r'_i)$ is in $I$ for all $i$. Now, we want to bound $Pr[r_i -r'_i \in I]$ for $I\in \mathcal{I}.$ By definition of $\mathcal{I},$ we can write $I = I[f,d]$ for $f \in M$ and $d \in [n+\deg(f)-1, n+n'-2].$ Obviously, $r_i-r'_i \in I[f,d]$ iff $\deg(r_i-r'_i) \leq d-n+2$ and $f \mid (r_i - r'_i ).$ Note that $Pr[\deg(r_i -r'_i) < d-n+2] \leq \delta^{n+n'-2-d},$ as this is the probability that $r_i$ and $r'_i$ agree on their $n+n'-2-d$ higher coefficients. 
+
+Next, we want to bound $D: = Pr[r_i \equiv r'_i \pmod{f} | \deg(r_i -r'_i) < d-n+2].$ Let $w_i, w'_i$ be  $r_i, r'_i$ modulo  $x^{d-n+2}$ respectively, then they are independently chosen polynomials from $\chi^{d-n+2}[x],$ even when we condition on $\deg(r_i -r'_i) < d-n+2.$ Since $(r_i-r'_i) = (w_i-w'_i),$ we have $$D = Pr[w_i \equiv w'_i \pmod{f}] \leq \max_{\bar{w} \in \poly{\mathbb{Z}_q}{\deg(f)} } Pr[F(w_i) = \bar{w}] \leq \delta^{\deg(f)  },$$   
+where $F(w_i) = (w_i \!\mod f).$ We show that the last inequality is true. Fix an arbitrary $\bar{w};$ we only need to prove $Pr[F(w_i) = \bar{w}] \leq \delta^{\deg(f)}.$ For a vector $v \in \Z_q^{d-n-\deg(f)+2}$ let $T_v$ be set of polynomials $w \in \poly{\mathbb{Z}_q}{d-n+2}$ whose $(d-n-\deg(f)+2)$  highest order coefficients are fixed at $v.$ The restricted map $F_{T_v}$ is bijective, let $\bar{w}^v$ denote the unique inverse of $\bar{w}$ in $T_v.$ If $w_i$ in $T_v,$ then $F(w_i) = \bar{w}$ iff $w_i = \bar{w}^v,$ and this happens with probability $\leq (2^{-H_{\infty}(\chi)})^{\deg(f)} \leq \delta^{\deg(f)}.$ Thus $Pr[F(w_i) = \bar{w}] =\sum_v Pr[F(w_i) = \bar{w} | w_i \in T_v] Pr[w_i \in T_v] \leq \sum_{v} (\delta^{\deg(f)} Pr[w_i \in T_v]) = \delta^{\deg(f)}. $
+
+Hence, $Pr[r_i -r'_i \in I[f,d]] \leq \delta^{n+n'-2-d} \delta^{\deg(f)}.$
+
+We return to bounding $C.$ Clearly $|I[f,d]| = q^{d - \deg(f)+1}.$ In $C$, group all $f$ of the same degree $k$ together, and note that the number of monic polynomials $f \in  \poly{\mathbb{Z}_q}{n'} $ of degree $k$ is $q^k$, we have $C\leq \sum_{k=0}^{n'-1}\sum_{d = n + k-1}^ {n+n'-2} (q^{d+1-k})^{-1} (\delta^{n+n'-2-d+k})^t q^k.$
+
+The LHS of equation \ref{eq:lhlpf} evaluates to $q^{n+n'-1} B \leq q^{n+n'-1} \delta^{n't} + q^{n'+n-1} C.$ Next, we bound $q^{n'+n-1} C$ via
+\begin{align*} &q^{n+n'-1} \sum_{k=0}^{n'-1}\sum_{d = n + k-1}^ {n+n'-2} q^{k-d-1} (\delta^{n+n'-2-d+k})^t q^k\\
+ &= \sum_{k=0}^{n'-1} \sum_{d = n + k-1}^{n+n'-2}  {(\delta^t q^2)}^k {(\delta^t q )}^{n+n'-2-d} \\
+&\leq (\sum_{k=0}^{n'-1} {(\delta^t q^2  )}^k) (\sum_{d=n-1}^{n+n'-2} {(\delta^t q )}^{n+n'-2-d} ) \\
+&= 1 + O(q^2 \delta^t) \end{align*}
+
+The hypothesis that $q^2 \delta^t $ and $q^{n+n'-1} \delta^{n't}$ are negligible in $n$ concludes the proof for the first claim.
+
+%Thus, LHS of \ref{eq:} is bounded by $$
+
+%Thus, we have $C \leq $  
+% \begin{equation} \label{eq:lhlpf}
+%     \begin{split}
+%         &q^{nt +n+n'-1} Pr \left [ \forall i. a_i = a'_i \land \sum_{i=1}^t a_i r_i = \sum_{i=1}^t a'_i r'_i \right] =1+\negl{n} \\
+% LHS&= q^{nt +n+n'-1} (\prod_{i=1}^t Pr[a_i=a'_i] ) Pr[\sum_{i=1}^t a_i(r_i-r'_i) =0] \\
+% &\leq  q^{n+n'-1}( Pr[\forall i: r_i - r'_i = 0]  + \sum_{I \in \mathcal{I}} |I|^{-1} Pr[I(r_1-r'_1, \cdots, r_t-r'_t) = I \land (r_i-r'_i)_{i\leq t} \neq (0)_{i\leq t} ] ) \\ \intertext{note that $I(r_1-r'_1, \cdots, r_t-r'_t) = I  \in \mathcal{I}$ implies $(r_i-r'_i)_{i\leq t} \neq (0)_{i\leq t}$, thus}
+% LHS &\leq q^{n+n'-1}( \delta^{n' t}  + \sum_{I \in \mathcal{I}} |I|^{-1} Pr[I(r_1-r'_1, \cdots, r_t-r'_t) = I ])
+%     \end{split}
+% \end{equation} 
+
+% % &\leq (q^{1+\frac{n}{n'}} \delta^t)^{n'} + q^{n+n'-1} \sum_{I \in \mathcal{I}} |I|^{-1} Pr[I(r_1-r'_1, \cdots, r_t-r'_t) \subseteq I]\\
+% % &\leq 2^{-\theta(n)} +q^{n+n'-1} \sum_{f \in M, d \in [n + \deg (f)-1, n+n'-2]} |I(f, d)|^{-1} Pr[(r_1-r'_1, \cdots, r_t-r'_t) \subseteq I[f,d]\,]\\
+% % & = \negl{n}+q^{n+n'-1} \sum_{f \in M, d \in [n + \deg (f)-1, n+n'-2]} |I(f, d)|^{-1} \prod_{i=1}^t Pr[r_i-r'_i \in I[f,d] \,]
+
+% % Since $q^{1+\frac{n}{n'}} \delta^t \leq 2^{-1}$ and $n' = \omega(\log n),$
+% % \begin{equation}
+% % q^{n+n'-1}( \delta^{n' t} \leq (q^{1+\frac{n}{n'}} \delta^t)^{n'} \leq 2^{-n'} = \negl{n}
+% % \end{equation}
+% Now,
+% \begin{equation}
+%     \begin{split}
+%      &\sum_{I \in \mathcal{I}} |I|^{-1} Pr[I(r_1-r'_1, \cdots, r_t-r'_t) = I ]\\
+%     &\leq  \sum_{I \in \mathcal{I}} |I|^{-1} Pr[I(r_1-r'_1, \cdots, r_t-r'_t) \subseteq I]\\
+% &\leq  \sum_{\substack{f \in M\\ d \in [n + \deg (f)-1, n+n'-2]} } |I(f, d)|^{-1} Pr[I(r_1-r'_1, \cdots, r_t-r'_t) \subseteq I[f,d]\,]\\
+% & =\sum_{\substack{f \in M\\ d \in [n + \deg (f)-1, n+n'-2]}} |I(f, d)|^{-1} \prod_{i=1}^t Pr[r_i-r'_i \in I[f,d] \,]
+%     \end{split}
+% \end{equation}
+% \begin{align*} Pr[r_i-r'_i \in I[f,d] \,] &= Pr[\deg(r_i -r'_i) < d-n+2 \land f \mid (r_i -r'_i) ] \\
+% &= Pr[\deg(r_i -r'_i) < d-n+2] \cdot Pr[r_i \equiv r'_i \mod f | \deg(r_i -r'_i) < d-n+2] \end{align*}
+
+% Clearly,  $Pr[\deg(r_i -r'_i) < d-n+2] \leq \delta^{n+n'-2-d},$ as this is the probability that $r_i$ and $r'_i$ agree on their $n+n'-2-d$ higher coefficients. Let $w_i = r_i \mod x^{d-n+2}$ and analogous for $w'_i$, then $w_i, w'_i$ are random and independent polynomials chosen from $\chi^{d-n+2}[x]$, and 
+% $$ Pr[r_i \equiv r'_i \!\mod f | \deg(r_i -r'_i) < d-n] = Pr[w_i \equiv w'_i\! \mod f] \leq \max_{\bar{w} \in \poly{\mathbb{Z}_q}{\deg(f)}} Pr[w_i \equiv \bar{w}\!\mod f] \leq \delta^{\deg(f)  }$$
+% where $\bar{w}$ ranges over all polynomials in $\poly{\mathbb{Z}_q}{\deg(f)}$. Last ineq is true because for any fixed value of the $d-n - \deg(f)+2$ higher order coefficients of $w_i $, the function $w_i \mapsto w_i \mod f$ is bijective, and $\max_{z\in \mathbb{Z}_q} Pr_{x \sim \chi}[x = z] \leq \delta $ %% \max_{|z| \leq s \log n} Pr_{x \sim D_{\mathbb{Z},s}}[x = z | \, |x| < s\log n] +\negl{n} \approx s^{-1} + \negl{n}<1/2 ,$ $ 
+% so any value $\bar{w}$ is "hit" with probability $\leq \delta^{\deg(f) }$ (in the conditioned probability and the total probability).
+
+% Clearly, $|I[f,d]| = q^{d - \deg(f)+1}$. Also, the number of monic poly $f \in  \poly{\mathbb{Z}_q}{n'} $ of degree $k$ is $q^k$. Group all the $f$'s of same degree $k$ together, LHS becomes
+% \begin{align*} &q^{n+n'-1} \sum_{k=0}^{n'-1}\sum_{d = n + k-1}^ {n+n'-2} q^{k-d-1} (\delta^{n+n'-2-d+k})^t q^k\\
+%  &= \sum_{k=0}^{n'-1} \sum_{d = n + k-1}^{n+n'-2}  {(\delta^t q^2)}^k {(\delta^t q )}^{n+n'-2-d} \\
+% &\leq (\sum_{k=0}^{n'-1} {(\delta^t q^2  )}^k) (\sum_{d=n-1}^{n+n'-2} {(\delta^t q )}^{n+n'-2-d} ) \\
+% &= 1 + O(q^2 \delta^t) \end{align*}
+% %when $q^2 \delta ^t < q^{1 + n/n'} \delta^t  = O(\frac{1}{q^{\log n}} )$, %i.e. $t=2\log^2 q$, for example.
+% Combining this with Equation (\ref{eq:lhlpf}) and the hypothesis that $q^2 \delta^t $ and $q^{n+n'-1} \delta^{n't}$ are negligible in $n$ concludes the proof for the first claim.
+
+For the second claim: that $n\leq n'$ implies $q^{n+n'-1} \delta^{n't} < q^{2n} \delta^{n't} = (q^2 \delta ^{n't/n})^n. $ That $\delta \leq 1$ and $n't/n \leq t$ implies $\delta^{t} \leq\delta^{n't/n} = (\frac{1}{\omega(1)})^{\Omega(\log n)} = O( n^{-\log \omega(1)})= \negl{n}.$ Since $q=\text{poly(n)}$ so is $q^2$ thus $q^2 \delta^t$ and $(q^2\delta^{n't/n})^n$ are $\negl{n}.$ 
+\end{proof} 
+% \begin{lemma}
+% Assume that Theorem \ref{thm:lhl} holds, $t= poly(n)$, and we can sample from $\chi$ in $poly(n)$ time. 
+
+% With overwhelming probability over choice of $a_i \sample U(\poly{\Z_q}{n}),$ we have $(r_i \sample \chi^{n'}[x] \forall i\in [t]: \sum_{i=1}^t a_i \cdot r_i) \approx_c U(\poly{\Z_q}{n+n'-1}). $ 
+% \end{lemma}
+% \begin{proof}
+% Suppose for contradiction that the statement is false i.e. that there exists a ppt algorithm $\mathcal{A}$ such that for a non-negligible portion (say $p\in [0,1]$) of $(a_i)_{i=1}^t \in (\poly{\Z_q}{n})^t$, $\mathcal{A}$ distinguish between $\sum_{i=1}^t a_i \cdot r_i$ and a sample of $U(\poly{\Z_q}{n+n'-1})$ with non-negligible probability. Consider algorithm $\mathcal{A'}$ that distinguish $V$ and $U(S)$ (as defined in Theorem \ref{thm:lhl}) by:
+% \begin{itemize}
+%     \item samples each $a_i$ independently from $U(\poly{\Z_q}{n})$ 
+%     \item samples each $r_i$ independently from $U(\chi^{n'}[x]).$ Compute $u=\sum_{i=1}^t a_i \cdot r_i$
+%     \item runs $\mathcal{A}(a_1, \cdots, a_t, u)$ and output same answer.
+% \end{itemize} 
+% By the hypothesis, the two sampling steps can be done in $poly(n)$ time. The last step takes polynomial time based on our assumption of $\mathcal{A}.$
+% The success rate of $\mathcal{A'}$ is $p$ times that of $\mathcal{A},$ which is non-negligible because of assumption on $p$ and $\mathcal{A}.$
+% \end{proof}
+\begin{lemma} \label{lemma:clmpmf}
+%For distribution $\chi = D_{\Z,\sigma}$ and positive integer $q,$ let $CL(\chi,q), MPMF(\chi,q) $ be as in Theorem \ref{thm:lhl}. %Let $CL(\chi) , MPMF(\chi)$ be as in Lemma \ref{lemma:clmpmfbound}.
+
+Let $\chi :=  D_{\Z, \sigma}, \chi_q := \chi \!\mod q = D_{\Z_q, \sigma}.$
+For $\sigma =poly(n), q = \omega(\sigma \log^{1/2} n ) , \sigma = \omega(1),$ we have $\max \{ \cp(\chi_q), 2^{-H_{\infty}(\chi_q)} \} \leq c \sigma^{-1}$ for some constant $c.$  %$CL(\chi,q), MPMF(\chi,q)  \leq c \sigma^{-1}$ for some constant $c.$ 
+\end{lemma}
+\begin{proof}
+By the tail inequality, the support of $\chi$ is essentially contained in $(-q/2, q/2).$ Within this interval, collision $\mod q$ is same as collision, so we can use the bounds on $\cp(\chi)$ and $2^{-H_{\infty}(\chi)} $ established in Lemma \ref{lemma:tailIneq} to bound $\cp(\chi_q)$ and $ 2^{-H_{\infty}(\chi_q)}.$
+
+Fix $\epsilon\in (0,1/2)$ to be a small constant. By Lemma \ref{lemma:eta}, $n_{\epsilon}(\Z) \leq c' \log (1+ \epsilon^{-1})$ for some constant $c'.$ By Lemma $\ref{lemma:tailIneq}$ and the hypothesis, $$Pr_{x \sim \chi} [ \abs{x} \geq q/2] = \negl{n}.$$
+
+%Let $CL(\chi) , MPMF(\chi)$ be as in Lemma \ref{lemma:clmpmfbound}. 
+For $x,x'$ such that $\abs{x},{x'} < q/2$ then $x = x' \mod q$ iff $x=x'.$ %We identify $z\in \Z_q$ with an integer whose absolute value is $< q/2.$ 
+Let $F_x$ denote the event $\abs{x} < q/2.$ Thus $Pr [(x\equiv x' \pmod{q} ) \land F_x \land F_{x'}] \leq Pr [(x=x' \!\mod q ) | F_x \land F_{x'}] = Pr [x=x' | \abs{x},\abs{x'} < q/2) ] \leq Pr[x=x'] = \cp(\chi), $ where $x, x'$ are sampled i.i.d. from $\chi.$
+\begin{align*}
+    &\cp(\chi_q) = Pr_{x, x' \sim \chi} [x\equiv x'\pmod{q}] \leq  Pr [x\equiv x'\pmod{q}  | F_x \land F_{x'}] +  Pr[\overline{F_x \land F_{x'}}]  \leq \cp(\chi) + \negl{n}\\
+    &2^{-H_{\infty}(\chi_q)}  = \max_{z \in \Z_q} Pr_{x \sim \chi} [x\equiv z \pmod{q}]=\max_{z\in \Z \cap [-q/2,q/2]} (Pr [x\equiv z \pmod{q} | F_x]+  Pr[\bar{F}_x] )\leq 2^{-H_{\infty}(\chi)} + \negl{n}
+\end{align*}
+ Pick $\delta = \sigma^{-1} c' \log (1+\epsilon^{-1}) < 1/\sqrt{2}$ (possible as $\sigma = \omega (1)$) and $c = c' \log (1+\epsilon^{-1}) (\frac{1 + \epsilon}{1-\epsilon})^2 $ then the result follow by Lemma \ref{lemma:clmpmfbound}.
+\end{proof}
+% \begin{lemma}
+% For $\chi = D_{\mathbb{Z}, s}$ where $s = \omega(\sqrt{\log n})\geq \nu_{\epsilon}(\mathbb{Z})$ for some negligible $\epsilon$ and $s\log n < \frac{q}{2},$ then $CL(\chi)$ and $MPMF(\chi)$ (as defined in lemma \ref{thm:range}) are bounded above by $O(s^{-1}).$
+% \end{lemma}
+% \begin{proof}
+% The coefficients of $r_i$'s are drawn i.i.d. from $D_{\mathbb{Z},s}$. Because $s \geq \nu_{\epsilon}(\mathbb{Z})$, $D_{\mathbb{Z},s}$ is statistically closed to $\mathcal{N}(0,s),$ thus $Pr[r_{i,j} = r'_{i,j}] = O(s^{-1})$. By tail inequality (GPV08, lemma 4.2), $Pr[|r_{i,j}| \geq s \log n] = \negl{n}$. If $|r_{i,j}|, |r'_{i,j}| < s \log n < q/2$ then $r_{i,j} =r'_{i,j} \mod q$ iff $r_{i,j} =r'_{i,j} .$
+
+% Thus \begin{align*}
+% &Pr[r_{i,j} = r'_{i,j} \mod q] \\
+% &\leq Pr[r_{i,j} = r'_{i,j} \mod q \land (r_{i,j}, r'_{i,j} < s \log n)] + Pr[|r_{i,j}| \geq s \log n \lor |r'_{i,j}| \geq s \log n] \\
+% &= Pr[r_{i,j} = r'_{i,j}] + Pr[|r_{i,j}| \geq s \log n \lor |r'_{i,j}| \geq s \log n]\\
+% &=O( s^{-1})\\
+%     &\max_{z \in \mathbb{Z}_q }Pr_{x \sim D_{\mathbb{Z}, s} }[x = z \mod q]\\
+%     &=\max_{|z| \leq s \log n} Pr_{x \sim D_{\mathbb{Z},s }} [x = z | \, |x| < s\log n] +\negl{n} \\
+%     &= O( s^{-1}),
+% \end{align*}
+% \end{proof}
+\section{Trapdoor \& Samples}
+        % For $h \in \poly{R}{n}$ and $d\geq 1$, let $T^{n,d}(h)$ be the $(n+d-1)\times d$ matrix whose i-th column is vector of coefficients of $h\cdot x^{i-1}$ listed from lowest to highest degree. 
+       
+        %Let $T^{n,d}(h)$ be the transpose of $ Toep^{d,n}(h), \tau: = \lceil \log_2 q \rceil, \beta : = \lceil \frac{\log_2 n}{2}\rceil, d $ be such that $\gamma = \frac{n+2d-2}{d}$ is an integer. 
+         
+        
+       
+     We need the following results in \cite{MP}, sections 5.4 and 5.5.
+     \begin{theorem} \label{thm:Gausssample}
+     Let $G:=I_k \otimes \begin{bmatrix} 1 & 2 & \cdots & 2^{\tau-1} \end{bmatrix} \in \Z_q^{k \times k \tau}$ and matrices $A \in \Z^{k \times (m+k\tau)}, R \in \Z^{m\times k\tau}$ be such that $$A \begin{bmatrix} R \\ I_{k\tau} \end{bmatrix} = G.$$
+     
+     There exists an efficient algorithm $\mathcal{C}$ that:
+     \begin{itemize}
+         \item Offline phase: do some precomputation given $A, R, \sigma$
+         \item Online phase: Given vector $u,$ samples from $D_{\Lambda^{\perp}_u (A), \sigma}$ where $\sigma \geq \omega (\sqrt{\log k})\sqrt{7(s_1(R)^2 +1) }.$
+     \end{itemize}
+       %$\sigma = \sqrt{(s_1(R)^2 +1)(s_1(\Sigma_G) + 2) }$ 
+     % use s_1(\Sigma_G) = 4 or 5
+     
+     The online phase of $\mathcal{C}$ is dominated by the time to compute $R z$ where $z \in \Z^{k \tau}.$
+     \end{theorem}
+     %By [MP, lemma 4.2 \& section 5.4], for any $u \in \poly{\mathbb{Z}_q}{\gamma d}$ can sample $y \sim D_{\Lambda^{\perp}_u(A), s }$ where $s = \omega(n \log q \sqrt{\log n}) > (5(s_1(\tilde{L})^2+1) +1)^{1/2}\omega(\sqrt{\log n}) .$
+     
+     \begin{theorem} \label{thm:trapdoor}
+     Suppose $q= poly(n), d\leq n, dt/n = \Omega(\log n).$ There exists a ppt algorithm $\textbf{TrapDoor}$ that generates polynomials $$(a_1, \cdots, a_t, a_{t+1},\cdots, a_{t + \gamma \tau} ) \approx_s U((\poly{\Z_q}{n})^t \times (\poly{\Z_q}{n+d-1})^{\gamma \tau})$$ together with trapdoor $\tilde{L}.$ Given trapdoor $\tilde{L}$ and a syndrome $u\in \poly{\Z_q}{n+2d-1},$ algorithm $\textbf{Sample}(\tilde{L}, u)$ outputs $r_i$ satisfying $\sum_{i=1}^{t+\gamma \tau} a_i \cdot r_i = u$ in $\tilde{O}(dt)$ time. The distribution of $(r_i)$ outputted by $\textbf{Sample}$ is exactly the conditional distribution of $(D_{\Z^{2d-1}, \sigma} [x])^t \times (D_{\Z^d, \sigma}[x])^{\gamma \tau}$ given $\sum_{i=1}^{t+\gamma \tau}  a_i \cdot r_i = u,$ with $\sigma =  \omega (\log^2 n) \sqrt{n dt}.$   
+     \end{theorem}
+     \begin{proof}
+     Let $\tau: = \lceil \log_2 q \rceil, \beta : = \lceil \frac{\log_2 n}{2}\rceil, d \leq n$ be such that $\gamma = \frac{n+2d-2}{d}$ is an integer.
+     
+     For $ (i,j) \in [t] \times [\gamma \tau] :$ sample $a_i \sample U(\poly{\mathbb{Z}_q}{n})$ and $w_{i,j} \sample \chi^{d}[x]$ where $\chi=U(\{-\beta, \cdots, \beta \}).$
+     Since $\beta << q/2,$ we can interpret samples from $\chi$ as elements of $\Z_q.$ 
+       
+       Let 
+       \begin{equation} \label{eq:matPoly}
+           \begin{split}
+               \tilde{A} &=\begin{bmatrix} T^{n,2d-1}(a_1) | \cdots | T^{n,2d-1} (a_t)\end{bmatrix}\\
+               \tilde{L} &= \begin{bmatrix} T^{d, d}(w_{1,1}) & \cdots &  T^{d, d}(w_{1,\gamma \tau}) \\ \vdots &  & \vdots \\ T^{d, d}(w_{t,1}) & \cdots &  T^{d, d}(w_{t,\gamma \tau})\end{bmatrix}\\ 
+               \Gamma(h) &= \begin{bmatrix}T^{n+d-1,d}(h) | \cdots | T^{n+d-1,d}(h2^{\tau-1} ) \end{bmatrix}\\ 
+     G &=\begin{bmatrix}\Gamma(1) | \Gamma(x^d) | \cdots | \Gamma(x^{(\gamma-1) d}) \end{bmatrix} \\
+     I &= I_{ \gamma d \tau} = \begin{bmatrix} T^{1,d}(1) & \cdots  &  \\ \cdots & & \cdots \\  & & T^{1,d}(1) \end{bmatrix}\\
+     A &= [\tilde{A} | G - \tilde{A} \tilde{L}]\\
+     L &= \begin{bmatrix} \tilde{L} \\ I \end{bmatrix}
+           \end{split}
+       \end{equation} 
+     then $A L = G =I_{\gamma d}\otimes [1 \cdots 2^{\tau-1}].$ 
+     
+     %By section 2, $G-\tilde{A}\tilde{L}$ is matrix representation of $(\gamma \tau)$ polynomials each i.i.d. $\sim \poly{\mathbb{Z}_q}{n+d-1}.$
+    
+     
+     %Clearly, each coefficient of $w_{i,j}$ is sampled i.i.d. from $\chi:=U(\{-\beta, \cdots, \beta \})$ so $CL(\chi) = MPML(\chi) \approx 1/\log n.$
+     
+     Clearly, $\max_{i,j} \abs{\tilde{L}_{ij}} \leq \beta,$ thus by Lemma \ref{lemma:singVar}, $s_1(\tilde{L}) \leq  \beta\sqrt{( \gamma d \tau) \cdot (2d-1) t}.$
+     
+     This combined with Theorem \ref{thm:Gausssample} (for $k = \gamma d = n+2d-2$) allow sampling $\textbf{y}$ from $D_{\Lambda^{\perp}_u(A), \sigma }$ where $$\sigma =   \omega (\sqrt{\log (\gamma d)}) \beta \sqrt{7((\gamma d\tau)\cdot d \cdot t + 1)} = c \, \omega (\log^2 n) \sqrt{n \cdot (dt)},$$
+     for some constant $c.$ We were using $\gamma d = n+2 d-2 \leq 3n$ and  $\tau = \theta(\log q) = \theta(\log n)$ for $q =poly(n).$ Computing $\tilde{L} z$ for $z \in \Z_q^{\gamma d \tau}$ can be performed using polynomial multiplication, in roughly $\tilde{O}(dt)$ time. Trapdoor $\tilde{L}$ can be stored in its polynomial form, which takes $\tilde{O}(d)$ space.
+     
+      By Lemma \ref{lemma:matpoly} and Equation (\ref{eq:matPoly}), 
+      \begin{equation} \label{eq:A}
+      \begin{split}
+         \tilde{A} \tilde{L} &= \begin{bmatrix} T^{n+d-1,d}(u_1)| & \cdots &  |T^{n+d-1,d}(u_{\gamma \tau}) \end{bmatrix} \\
+         A &= \begin{bmatrix} T^{n,2d-1}(a_1) | \cdots | T^{n,2d-1} (a_t)| T^{n+d-1,d}(a_{t+1}) | \cdots |T^{n+d-1,d}(a_{t+\gamma\tau}) \end{bmatrix}
+      \end{split}
+      \end{equation}
+     where for $j\in [\gamma \tau]: u_j = \sum_{i=1}^t a_i \cdot w_{i,j}, \, a_{t+j} =c_j - u_j $  with $c_j \in \poly{\Z_q}{n+d-1}$ dependent only on $j.$ 
+     
+     Clearly, $\cp(\chi) = 2^{-H_{\infty}(\chi)}  = \beta^{-1} = O(\log^{-1} n).$ By Theorem \ref{thm:lhl} and hypothesis,
+     $$(a_1, \cdots, a_t, u_1, \cdots, u_{\gamma \tau}) \approx_s U(\poly{\Z_q}{n}^t \times  \poly{\Z_q}{n+d-1}^{\gamma \tau}),$$
+     thus $(a_i)_{i=1}^{t+\gamma\tau} =(a_1, \cdots, a_t, c_1-u_1, \cdots, c_{\gamma \tau} -u_{\gamma \tau}) \approx_s U(\poly{\Z_q}{n}^t \times  \poly{\Z_q}{n+d-1}^{\gamma \tau}).$
+     
+     
+     Write $\textbf{y}$ as $\begin{bmatrix} T^{2d-1,1}(r_1) \\ \vdots \\ T^{2d-1,1}(r_t) \\ T^{d,1}(r_{t+1}) \\ \vdots \\ T^{d,1}(r_{t+\gamma \tau})   \end{bmatrix},$ where $\deg(r_i) \begin{cases} <2d-1 \text{ for $i\in [t]$} \\  < d \text{ for $i\in \{t+1, \cdots, t+\gamma\tau\}$} \end{cases}$
+     
+     then by Equation (\ref{eq:A}) and Lemma \ref{lemma:matpoly}
+     \begin{equation} A \textbf{y} = T^{n+2d-2, 1} ( \sum_{i=1}^{t+ \gamma \tau} a_i \cdot r_i)  \end{equation}
+     thus $y \in \Lambda^{\perp}_u(A)$ iff $\sum_{i=1}^{t+\gamma \tau} a_i \cdot r_i = u.$
+     
+     To prove the claim about distribution of $(r_i),$ we note that the columns of $A$ generate $\Z^{n+2d-2}$ since the columns of $G$ does, and $A L = G.$ Hence, there exists $t$ such that $At = u.$ Then, Theorem 5.2 in \cite{trapdoor} applies, and the conditional distribution is exactly $t + D_{\Lambda^{\perp}(A), \sigma, -t} = D_{\Lambda^{\perp}_u(A), \sigma}.$ Indeed, the support is the same i.e. $t + \Lambda^{\perp}(A) = \Lambda^{\perp}_u(A),$ and for $x \in \Lambda^{\perp}_u(A),$
+     $$D_{\Lambda^{\perp}_u(A), \sigma} (x) = \frac{\rho_{\sigma} (x) }{ \rho_{\sigma} (\Lambda^{\perp}_u(A))} = \frac{\rho_{\sigma} (x-t+t) }{ \rho_{\sigma} (\Lambda^{\perp}(A)) +t} = D_{\Lambda^{\perp}(A), \sigma, -t} (x-t).$$
+     
+     \end{proof}
+     %Consider $A, \textbf{y}$ as concatenation of coefficient vector of polynomials then $A=[a_1 \cdots a_t | a_{t+1} \cdots a_{t+\gamma \log q}], y = [r_1 \cdots r_t | r_{t+1} \cdots r_{t+\gamma \log q }]$ and $\sum_{i=1}^{t+\gamma \log q } a_i \cdot r_i = u$
+     
+     %Rearrange columns of $G$ gives $[I_{n+2d} | \cdots | \log q I_{n+2d}]$ so $G$ generate $\mathbb{R}^{n+2d}.$
+\section{Encryption Schemes from Middle-Product LWE}
+\subsection{Dual-Regev Encryption Scheme} \label{subsec:dualRegev}
+
+%Let the security parameter be $\lambda.$ 
+
+Unless otherwise stated following parameters are positive integers.
+
+Let $q$ be a prime, $\tau: = \lceil \log_2 q \rceil, n, d, k$ be such that $\gamma = \frac{n+2d-2}{d} \in \mathbb{N}$ and $2d +k \leq n.$ Let $t>0, t'= t+\gamma \tau.$ Let $\chi: =\lfloor D_{\alpha\cdot q} \rceil$ be the distribution over $\Z$ where we sample from $D_{\alpha \cdot q}$ then round to the nearest integer. Let $\sigma \in \R_{> 0}$ be a parameter to be specified later. Message space is $\mathcal{M} = \poly{\{0,1\}}{k+1}.$
+
+\begin{itemize}
+\item 
+$\KeyGen(1^\secp)$: 
+
+For $i=1, \cdots, t$: Sample $a_i \leftarrow U(\poly{\mathbb{Z}_q}{n})$,  $r_i \leftarrow D_{\mathbb{Z}^{2d-1}, \sigma}[x]$;
+
+For $i=t+1, \cdots ,t'$: Sample $a_i \leftarrow U(\poly{\mathbb{Z}_q}{n+d-1})$,  $r_i \leftarrow D_{\mathbb{Z}^{d}, \sigma}[x]$. 
+
+Let $u:= \sum_{i=1}^{t'} a_i r_i; \, \pk := (a_1,\cdots, a_{t'}, u); \, \sk :=(r_1, \cdots, r_{t'} )$
+
+\item
+$\Enc(pk =((a_i)_{i\leq t'}, u),\mu)$: 
+
+Sample $s \leftarrow U(\poly{\mathbb{Z}_q)}{n+2d+k-1})$
+
+For $i=1, \cdots, t$: Sample $e_i \leftarrow \chi^{ 2d+k}[x]. $ Compute $b_i = a_i \odot_{2d+k} s + 2 e_i$
+
+For $i=t+1, \cdots ,t'$: Sample $e_i \leftarrow  \chi^{d+k+1}[x] .$ Compute $b_i = a_i \odot_{d+k+1} s+2e_i$
+
+Sample $e' \leftarrow \chi^{ k+1}[x]. $ Compute $c_1 = \mu + u\odot_{k+1} s + 2e'  $
+
+Output ciphertext $c= (c_1, (b_i)_{i \leq t} )$
+
+\item 
+$\Dec(\sk = (r_i)_{i\leq t}, c)$: output $(c_1 - \sum_{i=1}^{t'} b_i \odot_{k+1} r_i \mod q ) \mod 2$. 
+\end{itemize}
+
+\begin{theorem}
+\label{thm:dualregev}
+%[State Theorem re correctness and security (from what assumption?)]
+
+% For $S = n^c, \sigma = \omega(\sqrt{\log n} ), t = O(\log n), \alpha   = \Omega(\frac{n^{3/2+c} }{q }), \ell = n + 2d + k, $ 
+For $\alpha^{-1} > (4 \omega(\log n) \sigma K+1)  $ where $K:= t(2d-1) + \gamma \tau d,$ the scheme is correct. 
+
+Assume that $\sigma = \omega(1), dt/n= \Omega(\log n),$ $q$ is a prime polynomial in $n$, $q =\Omega (\alpha^{-1}n^{1+1/2+c})$ and $q = \omega(\log^{1/2} n) \sigma. $ The scheme is semantically secure assuming $\text{PLWE}^{(f)}_{q, D_{\alpha'\cdot q} }$ is hard for some polynomial $f$ such that the constant coefficient of $f$ is coprime with $q, \deg (f) \in [2d+k, n], EF(f) =O(n^c)$ and error $\alpha' = \Omega(\sqrt{\deg(f) }/q).$ 
+\end{theorem}
+
+\begin{proof}
+By Lemma \ref{lemma:mpAssoc}, 
+$$c_1 - \sum_{i=1}^t b_i \middleProduct{k+1} r_i = \mu + \sum_{i=1}^t  (r_i \cdot a_i)\middleProduct{k+1} s + 2e' -\sum_{i=1}^t r_i \middleProduct{k+1} (a_i \odot_{d+k} s+2 e_i) = \mu +2(e'- \sum_{i=1}^{t'} r_i \middleProduct{k+1} e_i) $$
+
+If $\dabs{\mu +2(e'- \sum_{i=1}^{t'} r_i \middleProduct{k+1} e_i)}_{\infty} < q/2,$ then centered reduction modulo $q$ of $c_1 - \sum_{i=1}^t b_i \middleProduct{k+1} r_i$ gives $\mu +2(e'- \sum_{i=1}^{t'} r_i \middleProduct{k+1} e_i).$ Reducing modulo $2$ gives message $\mu.$ 
+
+We want to bound coefficients of $\sum_{i=1}^{t'} r_i \middleProduct{k+1} e_i.$ Coefficient of $x^z$ in $r_i \middleProduct{k+1} e_i$ is 
+
+$\sum_w (\textbf{r}_i)_w (\textbf{e}_i)_{z+k-w}$ where $w \in [0,\deg(r_i)] \cap [z+k-\deg(e_i),z+k].$
+
+Using tail inequality (see Lemma \ref{lemma:tailIneq}) and union bound, can bound $\dabs{r_i}_{\infty}$ and $\dabs{e_i}_{\infty}$ as follow: 
+$$Pr[\dabs{r_i}_{\infty} >  \omega(\sqrt{\log n} ) \sigma ] < \negl{n}.$$
+$$Pr[\dabs{e_i}_{\infty} >  \omega(\sqrt{\log n} ) \alpha \cdot q ] < \negl{n}.$$
+Thus, again by union bound, except with $\negl{n}$ probability
+$$\dabs{e'-\sum_{i=1}^{t'} r_i \middleProduct{k+1} e_i}_{\infty} < K (\omega(\sqrt{\log n} ) \sigma)  (\omega(\sqrt{\log n} ) \alpha \cdot q) + (\omega(\sqrt{\log n} ) \alpha \cdot q).$$
+%Using tail inequality and union bound, we can pick appropriate $\alpha$ so that with overwhelming probability, coefficient of $\sum_{i=1}^{t'} r_i \middleProduct{k+1} e_i$ is bounded.
+
+where $K : = t(2d-1) + \gamma \tau d \geq \sum_{i=1}^{t'} (\deg(r_i)+1).$ 
+
+Pick $\alpha < (4 \omega(\log n) \sigma K+1)^{-1}  $ then the above is $< q/4$ and the scheme is correct.
+
+Security: By Theorem \ref{thm:lhl}, Lemma \ref{lemma:clmpmf} and hypothesis on $\sigma$ and $dt$, we have:%except for negligible probability over the choice of $(a_i)_{i=1}^{t'},$ we have: 
+% $$(r_i \sample \chi^{2d-1} \forall i\in [t], r_i \sample \chi^{n+d-1} \forall i\in[t+1,t']:u= \sum_{i=1}^{t'} a_i \cdot r_i) \approx_c (u'\sample U(\poly{\Z_q}{n+2d-1}):u')$$
+$$((a_i)_{i=1}^t, \sum_{i=1}^t a_i \cdot r_i)_{\substack{a_i \sample U(\poly{\Z_q}{n}) \\ r_i \sample D_{\Z^{2d-1}, \sigma}[x] }} \approx_s ((a_i)_{i=1}^t, u')_{\substack{a_i \sample U(\poly{\Z_q}{n}) \\ u'\sample U(\poly{\Z_q}{n+2d-2}) }}$$
+
+Since $u = u'+\sum_{i=t+1}^{t'} a_i \cdot r_i$, can replace $u$ with a uniformly random polynomial. By Theorem \ref{thm:mplwe} and the hypothesis on hardness of $\text{PLWE}^{(f)}_{q, D_{\alpha'\cdot q}}$, for $\alpha\cdot q =\Omega(n^{1+1/2+c})\geq  \alpha' \cdot q (\frac{n+2d+k}{2}) n^c ,$ then $\text{NMP-LWE}^{n+2d+k}_{q, t'+1, \textbf{n},D_{\alpha \cdot q}}$ is hard, where $$\textbf{n}_i = \begin{cases} n \text{ if $i\in [t]$}\\ $n+d-1$ \text{ if $t+1 \leq i \leq t'$}\\ $n+2d-2$ \text{ if $i = t'+1$}  \end{cases}. $$ Thus
+$$(pk, (a_i\middleProduct{2d+k} s + 2e_i)_{i=1}^t , (a_i\middleProduct{d+k+1} s + 2e_i)_{i=t+1}^{t'}, u \middleProduct{k+1}s + 2e' ) \approx_c (pk, (U_i)_{i=1}^{t'+1})$$
+where $U_i$ are i.i.d. random samples from appropriate space.
+Thus the scheme is semantically secure. \qedhere
+
+%So for a secure and correct scheme, we pick $\alpha < (4 \omega(\log n) \sigma K+1)^{-1}  $ and $q =\Omega (\alpha^{-1}n^{1/2+c}). $
+% Coefficients of the $r_i$'s are $< \sigma \epsilon$ where $\epsilon = \omega(\sqrt{\log n})$, %= \theta(n \log^3 n)$ 
+% except with negligible probability by union bound \& tail inequality.  Every coefficient of $\sum_{i=1}^{t'} r_i \middleProduct{k+1} e_i$ has magnitude $\leq (\sigma \log n) (\alpha q) \sqrt{K} + K  < q/2$ by choice of $\alpha $, this ensures correctness (similar to lemma 4.1). Then MP-LWE holds as long as $\alpha q > n^{1+1/2+c} $ (can choose $q = poly(n)$ of appropriate degree)
+
+%Correctness: follow from correctness of primal scheme, that $$u\odot_d s - \sum_{i=1}^t b_i \odot_d r_i = \sum_{i=1}^t  (r_i a_i)\odot_d s -\sum_{i=1}^t r_i \odot_d (a_i \odot_{d+k} s+2 e_i) = 2 r_i \odot_d e_i$$
+
+
+%In the following section, we prove that $(a_1, \cdots, a_t, \sum_{i=1}^t a_i r_i)$ is negligibly close to uniform for $t = \theta(\log^2 q)$, so we can replace $u$ with random string. 
+
+% Proof 1: By proof of lemma 3.7, the reduction from PLWE(f) to MP-LWE allows for MPLWE samples $(a_i, a_i \odot_{d_i} s + e)$ where the $a_i$'s doesn't have same degree, as long as $\bigcap_{i=1}^t [d_i , \deg(a_i)+1] \neq \emptyset$ and $\deg f \in \bigcap_{i=1}^t [d_i , \deg(a_i)+1]$. Indeed, transform $(a_i, a_i s + e) \in PLWE(f)$ to $(a_i + f t_i, (a_i + f t_i) \odot_{v} s' + M^v_f e$ by picking $t_i$ randomly of appropriate degree, and $s' = Rot_f^{\deg(s')+1} M_f s  $  (see lemma 3.7, page 11). So ciphertext is random by section 2 (for randomness of $u$) and MP-LWE. 
+
+% Proof 2: using LHL for middle product
+% By MP-LWE assumption, we can replace all $(b_i)_{i\leq t}$ with random string. 
+% We can rewrite 
+% $$u \odot_d s + 2e' = (\sum_{i=1}^t r_i \dot a_i)\odot_d s + 2e' = \sum_{i=1}^t r_i \odot_d (a_i \odot_{d+k} s ) + 2e'= \sum_{i=1}^t r_i \odot_d b_i +2 (e'- \sum_{i=1}^t r_i \odot_d e_i) $$
+% With suitable error distribution rate for $e_i$ and $e'$, the term $e'- \sum_{i=1}^t r_i \odot_d e_i$ is negligibly close to random, so we can replace it with a random string. $h_{(b_i)_{i\leq t} } (r_i)_{i\leq t} = \sum_{i=1}^t r_i \odot_d b_i$ defined a universal hash function (see MP-LWE paper for proof), so Generalized Leftover Hash lemma, $$ ((a_i)_{i\leq t},(b_i)_{i\leq t }, \sum_{i=1}^t r_i \cdot a_i, \sum_{i=1}^t, \sum_{i=1}^t r_i \odot_d b_i) \approx ((a_i)_{i\leq t},(b_i)_{i\leq t }, \sum_{i=1}^t r_i \cdot a_i, \sum_{i=1}^t, \tilde{v} ) $$
+% where $a_i, b_i, \tilde{v}$ are uniformly random over their respective domains (this part is in MP-LWE).
+
+% Hence, ciphertext is negligibly close to random given the public key.
+%Thus the ciphertext is a random string.
+\end{proof}
+\subsection{IBE in the Random Oracle model} \label{subsec:IBE}
+We construct an IBE Scheme from the scheme in subsection \ref{subsec:dualRegev}. %Let the set of identity be $\mathcal{I} = \Z_q^{n+2d-1}.$ random oracle be $H: \mathcal{I} \to \poly{Z_q}{n+2d-1}.$
+%An IBE Scheme consists of the 4-tuple (IBE.Setup, IBE.Extract, IBE.Enc
+Let the set of identity be $\mathcal{I} = \Z_q^{n+2d-2}.$ We assume the parameters are chosen such that Theorem \ref{thm:trapdoor} holds. Use algorithm \textbf{Trapdoor} to generate mpk:=$(a_i)_{i=1}^{t'}$ and msk:=$\tilde{L}.$ Given an identity id, interpret it as an element $u \in \poly{\Z_q}{n+2d-2}$ and use algorithm \textbf{Sample} to generate $\sk_{id}:=(r_i)_{i=1}^{t'}$ such that $\sum_{i=1}^{t'} a_i \cdot r_i = u.$ Then use the Dual Regev scheme with public key $\pk:=((a_i)_{i=1}^{t'}, u)$ and secret key $\sk: = (r_i)_{i=1}^{t'}$ for encryption/decryption of message.
+
+\begin{theorem}
+Assume the parameters are picked as in Theorem \ref{thm:trapdoor} and Theorem \ref{thm:dualregev} (so that the Dual Regev Scheme is correct and semantically secure). Then the above IBE scheme is correct and CPA-secure in the random oracle model.
+
+
+\end{theorem}
+\begin{proof}
+Correctness of the IBE Scheme follows directly from correctness of Dual Regev Scheme.
+ 
+ In the game that defined CPA-security, the challenger can "pose" as the oracle to generate $\sk_{id}$ without using IBE.\textit{msk}. More concretely, in the query phase, given identity id that has not been queried before, the oracle sample $r_i$ from $D_{\Z^{d_i}, \sigma}$ for appropriate $d_i$ (as in DualRegev.KeyGen), then give $\sk_{id} =(r_i)_{i=1}^{t'}$ to the challenger and cache $\sk_{id}$ (to be given to challenger if queried for id again). Thus, the adversary cannot learn anything about IBE.msk during the query phase. By Theorem \ref{thm:trapdoor}, (IBE.mpk, id*)$=((a_i)_{i=1}^t, u^*)$ is statistically indistinguishable from DualRegev.pk$= ((a_i)_{i=1}^t,u^*).$ Thus the IBE scheme is CPA-secure as long as the DualRegev Scheme is semantically secure.
+\end{proof}
+\textbf{Remark}. Pick $d, k = \theta(n), t = \log n$ and $\sigma, \alpha^{-1}, q$ to be the lower bounds in Theorems \ref{thm:trapdoor} and \ref{thm:dualregev}.  Obviously, the schemes in subsections \ref{subsec:dualRegev} and \ref{subsec:IBE} has $\tilde{O}(n)$ keys and ciphertext sizes. We show that except for the initialization process (DualRegev.KeyGen and IBESetup), other algorithms in these schemes take $\tilde{O}(n)$ time. Product and middle product of polynomials can be computed in $\tilde{O}(n)$ time using FFT. By doing some pre-processing, sampling from $\chi = \lfloor D_{\alpha\cdot q} \rceil$ can be done in quasi-constant time via table look-up as in \cite{MP}. Thus, encryption and decryption in subsection \ref{subsec:dualRegev}'s scheme takes quasi-linear time. Theorem \ref{thm:trapdoor} gives that IBEExtract takes $\tilde{O}(dt) = \tilde{O}(n)$ time. %IBESetup is efficient (ppt), and only need to be run once at initialization. So we have a PKE and an IBE schemes that are very efficient and secure under a weaker assumption then previously constructed schemes from PLWE.  
+\subsection{IBE in the Standard model}
+\cite{CHKP} presents a way to build a standard model IBE from the same framework of trapdoor and dual-Regev encryption. They assume that the id space is $\{0,1\}^{\ell},$ create matrices $A_{i, b}$ for $b\in \{0,1\}$ with trapdoors  $T_{i,b}$ for each $i.$ Let $\pk:=(A_{i,b}), y$ where $y$ is a random vector, and $\sk : = (T_{i,b}).$ For query \textit{id}, let $A_{id} = [A_{1,id_1} || \cdots, A_{\ell, id_{\ell}} ].$ Then, given query \textit{id} that is not the challenged \textit{id*}, they use the trapdoor $T_{i,b}$ where $id_i \neq id^*_i$ to sample secret key $R_{id}$ s.t. $A_{id} R_{id} = y.$ The security proof follows from the underlying security of their dual-Regev like public key encryption scheme, as in the querying phase, no information about the trapdoor for $A_{id*}$ is leaked, per the carefully chosen use of trapdoor $T_{i,b}$ where $id_i \neq id^*_i$. Thus, the adversary cannot glean any information about $R_{id*} $ given $(A_{id*},y).$
+%One way of obtaining a standard model IBE is to assign each bit of the identity a sub-trapdoor $A_{i, \ell}$. 
+
+The dual-Regev like scheme along with the trapdoor generators in Theorem \ref{thm:trapdoor} can be used to create a standard model IBE scheme in the same way as in \cite{CHKP}. Specifically, we replace the matrix $A_{i,b}$ with a tuple $(a_j)_{i,b}$ of $t = \tilde{O}(1)$ polynomials generate by Theorem \ref{thm:trapdoor}, and random vector $y$ with a random polynomial. We state the parameters of this scheme. The master public/secret key size is roughly $\tilde{O}(n\ell),$ ciphertext expansion is $\tilde{O}(1).$ Secret key extraction takes $\tilde{O}(n \ell)$ while encryption and decryption takes $\tilde{O}(n).$ Roughly speaking, our parameters and algorithms' runtime are $n$-time better than the scheme in \cite{CHKP}. This gain in efficiency comes from the gain in efficiency of the dual-Regev like PKE.  
+% We describe an efficient IBE Scheme that is CPA-secure in the Standard model assuming the hardness of MP-LWE. This scheme is analogous to that described by Agrawal et al \cite{Agrawal:2010:ELI:2163822.2163859}. We summarize key components of Agrwal et al's construction, then show how to adapt them for our scheme.
+
+% Map $H: \Z_q^{n} \to \Z_q^{n\times n}$ such that $\forall id\neq id': H(id)-H(id') $ is full-rank.
+
+% $F_{id} = (A_0 | A_1 + H(id)\cdot B)$ where $A_0, A_1, B $ are statistically close to random matrices in $\Z_q^{n\times m}.$
+%The gig of Agrawal's construction is a 
+\section*{Appendix}
+     Correction of Lemma 5.5's proof in \cite{MP}:
+
+     In \cite{MP}, the author mistakenly stated that for non-negative definite matrices $B\geq A \geq 0$ then $A^{+} \geq B^{+}. $ This is not true in general. For example, when $B$ is positive definite i.e. $B> 0$ then $B^{+} = B^{-1} > 0;$ if $A^{+} \geq B^{+} $ then $A^{+} > 0$ so $A> 0$ (a contradiction if $A$ is not invertible). We note that the author only use that statement to prove the following fact about $\Sigma_3,$ and that we can prove this fact without using the wrong statement.
+     
+     Aim: prove $\Sigma_3 = (\Sigma_y^{+} + \Sigma_p^{+})^{+} \geq (\begin{bmatrix} R \\ I\end{bmatrix} \begin{bmatrix} R^t & I\end{bmatrix} )$ (see p.29)
+     
+     Modify assumption so that $\Sigma_y =  2\begin{bmatrix} R \\ I\end{bmatrix} \begin{bmatrix} R^t & I\end{bmatrix}  $ and $\Sigma_p > 2\begin{bmatrix} R \\ I\end{bmatrix} \begin{bmatrix} R^t & I\end{bmatrix} $ (okay with our application).
+     
+     Write $2 \begin{bmatrix} R \\ I\end{bmatrix} \begin{bmatrix} R^t & I\end{bmatrix} = Q \begin{bmatrix} D & 0 \\ 0 & 0\end{bmatrix} Q^T $ where $Q$ is orthogonal and $D$ is diagonal matrix of positive entries. Then there exists some small $\epsilon > 0$ s.t. $\Sigma_p \geq  Q \begin{bmatrix} D & 0 \\ 0 & \epsilon I\end{bmatrix} Q^T > 0.$ Thus $$0 < \Sigma_p^{+} = \Sigma_p^{-1} \leq Q \begin{bmatrix} D^{-1} & 0 \\ 0 & \epsilon^{-1} I\end{bmatrix} Q^T= (2\begin{bmatrix} R \\ I\end{bmatrix} \begin{bmatrix} R^t & I\end{bmatrix})^{+} + \begin{bmatrix} 0 & 0 \\ 0 & \epsilon^{-1} I\end{bmatrix} $$ and $$ 0 < \Sigma_p^{+} + \Sigma_y^{+} \leq (\begin{bmatrix} R \\ I\end{bmatrix} \begin{bmatrix} R^t & I\end{bmatrix})^{+} +  \begin{bmatrix} 0 & 0 \\ 0 & \epsilon^{-1} I\end{bmatrix} =  Q \begin{bmatrix} 2 D^{-1} & 0 \\ 0 & \epsilon^{-1} I\end{bmatrix} Q^T$$
+     then $$ (\Sigma_y^{+} + \Sigma_p^{+})^{+} = (\Sigma_y^{+} + \Sigma_p^{+})^{-1} \geq Q \begin{bmatrix} \frac{1}{2}D & 0 \\ 0 & \epsilon I \end{bmatrix} Q^T \geq \begin{bmatrix} R \\ I\end{bmatrix} \begin{bmatrix} R^t & I\end{bmatrix} $$
+     because $\epsilon > 0.$
+ \medskip
+ 
+\printbibliography    
+\end{document}
